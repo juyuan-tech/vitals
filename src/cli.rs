@@ -101,11 +101,9 @@ fn parse_logo(value: &str) -> Result<LogoChoice, String> {
 /// 前者把校验留在 CLI 边界，错误信息能自己写；后者会让配置模块反过来依赖 clap。
 /// 合法取值从 [`ModuleType::ALL`] 现取，不另抄一份名单，避免漂移。
 fn parse_module(name: &str) -> Result<ModuleType, String> {
-    if let Some(module) = ModuleType::ALL
-        .iter()
-        .copied()
-        .find(|module| module.name() == name)
-    {
+    // 比较时忽略大小写与 `-`/`_`：`LocalIp`、`localip`、`local-ip` 都能用
+    // （fastfetch 的长名与我们自己的名字各占一半江山，见 `ModuleType::from_name`）。
+    if let Some(module) = ModuleType::from_name(name) {
         return Ok(module);
     }
 

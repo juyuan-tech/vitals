@@ -522,3 +522,73 @@ impl ModuleType {
         }
     }
 }
+
+/// 把名字压平：大小写与 `-`/`_` 都不参与比较。
+///
+/// 这么比较是因为同一个模块在 fastfetch 那边有另一种写法：它的长名是 `LocalIp`、
+/// `CPUCache`、`TerminalFont`，我们是 `local-ip`、`cpu-cache`、`terminal-font`。
+fn normalize_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| *c != '-' && *c != '_')
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+impl ModuleType {
+    /// 名字 → 模块。**忽略大小写与 `-`/`_`**：照着 fastfetch 的文档敲的
+    /// `LocalIp`、`localip`、`local_ip` 都会落到 `local-ip` 上。
+    ///
+    /// 只管命令行：配置文件里的 `type = "..."` 走 serde 的枚举匹配，仍然要求
+    /// 我们自己的 kebab 名（写错时 serde 会列出全部合法取值，报错比这里更有用）。
+    /// 两条路故意不同——CLI 是别人照着它的文档敲的地方，配置文件是我们自己的。
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        let wanted = normalize_name(name);
+
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|module| normalize_name(module.name()) == wanted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_module_is_found_by_any_spelling() {
+        // fastfetch 的长名、它的小写连写、我们的 kebab 名，都要落到同一个模块。
+        for spelling in ["LocalIp", "localip", "local_ip", "local-ip", "LOCAL-IP"] {
+            assert_eq!(
+                ModuleType::from_name(spelling),
+                Some(ModuleType::LocalIp),
+                "{spelling} 该认出来"
+            );
+        }
+
+        assert_eq!(
+            ModuleType::from_name("CPUCache"),
+            Some(ModuleType::CpuCache)
+        );
+        assert_eq!(
+            ModuleType::from_name("termfont"),
+            None,
+            "不认识的就是不认识"
+        );
+        assert_eq!(ModuleType::from_name(""), None);
+    }
+
+    #[test]
+    fn every_module_finds_itself() {
+        // 两个 `name()` 撞车时 `find` 会给出错误的那一个，这条守着不撞车。
+        for module in ModuleType::ALL {
+            assert_eq!(
+                ModuleType::from_name(module.name()),
+                Some(module),
+                "{} 找不到自己",
+                module.name()
+            );
+        }
+    }
+}
