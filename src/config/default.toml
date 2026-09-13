@@ -1,0 +1,55 @@
+# Vitals 配置文件
+#
+# 位置：$XDG_CONFIG_HOME/vitals/config.toml
+#       未设置 XDG_CONFIG_HOME 时是 ~/.config/vitals/config.toml
+#       也可以用 `vitals --config <路径>` 临时指定别的文件。
+#
+# 加载顺序：内置默认 → 本文件 → 命令行参数。
+# 所以**只写你要改的**，没写的都沿用内置默认。
+#
+# 未知字段会直接报错（故意的）：拼错一个键名不该静默通过。
+
+# 配置版本。省略时按本程序支持的版本处理。
+config_version = 1
+
+# 要显示的模块，顺序即显示顺序。
+#
+# 注意：这一段一旦写上就是**整体替换**内置默认，不是追加。
+# 列表逐项合并说不清顺序和去重，所以规则简单点：想少显示几个，就把要留的列全。
+#
+# 可用模块：
+#   os      操作系统          host    主机名
+#   kernel  内核版本          uptime  开机时长
+#   shell   当前 shell        user    当前用户
+#   cpu     CPU 型号与核心数   memory  内存用量
+#   disk    磁盘用量          rust    Rust 工具链
+
+[[modules]]
+type = "os"
+
+[[modules]]
+type = "host"
+
+[[modules]]
+type = "kernel"
+
+[[modules]]
+type = "uptime"
+
+[[modules]]
+type = "shell"
+
+[[modules]]
+type = "user"
+
+[[modules]]
+type = "cpu"
+
+[[modules]]
+type = "memory"
+
+[[modules]]
+type = "disk"
+
+[[modules]]
+type = "rust"

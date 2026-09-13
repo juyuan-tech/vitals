@@ -16,5 +16,9 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.6", features = ["derive"] }
-# 只给错误类型用：编译期展开的 proc-macro，零运行时开销。
+# 配置的反序列化。derive 是编译期的，运行时不带 proc-macro。
+serde = { version = "1", features = ["derive"] }
+# 错误类型：编译期展开的 proc-macro，零运行时开销。
 thiserror = "2"
+# 主配置格式。注意链上已经是 1.x 了，生态里大量教程还是 0.8 的写法。
+toml = "1"

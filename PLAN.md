@@ -12,7 +12,7 @@
 | 1 | 「他人可 `cargo install vitals`」 | crate 名已定 `vitals-rs`，命令本身对不上 | `cargo install vitals-rs`（装出来仍是 `vitals`） | 实测：crates.io 上 `vitals` 被 robopoker 的 telemetry 库占用（1.2.0、106 下载、09-06 更新），`vitals-rs` 空闲 |
 | 2 | 阶段 10 手写 README/Release/二进制 | 手搓 GitHub Actions 是 2022 年的做法 | `cargo-dist` 0.32.0：一条命令生成跨平台产物 + shell/pwsh 安装器 + Homebrew/MSI + binstall 元数据 | crates.io：cargo-dist 0.32.0 |
 | 3 | 阶段 9「快照测试」未指定工具 | 手写 expect 文件难维护 | `insta` 1.48.0（`cargo insta review` 工作流） | crates.io：insta 1.48.0 |
-| 4 | 配置路径写死 `~/.config/vitals/` | 无视 XDG 规范 | 读 `$XDG_CONFIG_HOME`，回退 `~/.config`；用 `etcetera` 0.11.0 | crates.io：etcetera 0.11.0 |
+| 4 | 配置路径写死 `~/.config/vitals/` | 无视 XDG 规范 | 读 `$XDG_CONFIG_HOME`（相对路径按规范忽略），回退 `~/.config`；**不用 `etcetera`，自己写十几行** | 实测：库把 env 读取藏在内部，而 edition 2024 的 `set_var` 是 `unsafe`（本 crate `forbid(unsafe_code)`）→ 用库就没法给路径解析写测试；自写则纯逻辑可注入、可测，Windows 分支留 v1.0 |
 | 5 | `--no-color` + 手写 ANSI | 管道里仍会吐转义码，需用户手动干预 | `anstyle` 1.0.14 + `anstream` 1.0.0：非 TTY 自动降级，并遵循 `NO_COLOR` / `CLICOLOR_FORCE` | crates.io：anstyle 1.0.14 / anstream 1.0.0 |
 | 6 | 「对齐必须用 Unicode 显示宽度」但未指定 | 教程多为 0.1 写法，0.2 是破坏性变更 | `unicode-width` 0.2.2；`char::width()` 现返回 `Option<usize>` | 实测：`"a\u{0301}b"` → bytes=4 / chars=3 / **display=2**；`'a'.width()` = `Some(1)` |
 | 7 | 阶段 8「模块并行采集」未指定手段 | 容易顺手引 rayon | `std::thread::scope`（1.63 起稳定），一次性 CLI 无需线程池 | std 稳定特性 |
@@ -26,7 +26,7 @@
 | 15 | 公网 IP / 网络模块未定依赖形态 | 会拉进 TLS 栈 + 联网，与体积、冷启动、默认隐私冲突 | 做成 Cargo feature（`net`，默认关），模块也默认关 | 阻塞式 `ureq` 3.4.1 可用，但体积代价必须可选 |
 | 16 | 包管理器计数写 `pacman / dpkg / rpm`（暗示开子进程） | 违反自己「能读文件就不开子进程」的原则 | 数 `/var/lib/pacman/local` 目录项、解析 `/var/lib/dpkg/status`；rpm 库格式复杂，退回 `rpm -qa` | 见 §5.2 |
 | 17 | `when-command-exists` 未定实现 | 若真去执行命令，既慢又有副作用 | 只做 PATH 查找，**绝不执行** | 见 §2.5 |
-| 18 | JSONC 兼容被当作「fastfetch 迁移预留」 | 格式兼容 ≠ schema 兼容，fastfetch 的 `modules` 结构与本计划不同 | 明确 JSONC 只是「带注释的另一种写法」；fastfetch schema 适配列为 v0.6 独立条目，且要求模块类型名刻意对齐 | 见 §2.2 |
+| 18 | JSONC 兼容被当作「fastfetch 迁移预留」 | 格式兼容 ≠ schema 兼容，fastfetch 的 `modules` 结构与本计划不同 | 明确 JSONC 只是「带注释的另一种写法」；fastfetch schema 适配列为 v0.6 独立条目，且要求模块类型名刻意对齐；**并且不单独落地 JSONC 解析器**——阶段 2 只做 TOML，JSONC 与适配层一起排到 v0.6 | 见 §2.2 |
 | 19 | 文件布局未规定，目录模块会顺手写成 `foo/mod.rs` | `mod.rs` 是 Rust 2018 之前的旧写法；同仓库多个 `mod.rs` 在标签页/搜索/diff 里无法区分 | 一律自名文件 + 同名目录（`collectors.rs` + `collectors/`），禁止 `mod.rs`；并用 `#![warn(clippy::mod_module_files)]` 在 CI 里钉死 | 实测：clippy 0.1.100 报 `` `mod.rs` files are not allowed `` + `` move `src/foo/mod.rs` to `src/foo.rs` ``；该 lint 属 restriction 组、默认关闭 |
 
 ---
@@ -41,7 +41,7 @@
 - 语言：Rust，edition 2024，MSRV 1.85，`rust-version = "1.85"`
 - 平台：Linux 优先，架构预留跨平台（见 §2.7）
 - 配置路径：`$XDG_CONFIG_HOME/vitals/config.toml`，未设置时回退 `~/.config/vitals/config.toml`
-- 配置格式：TOML 为主，JSONC 为兼容，JSON 为输出
+- 配置格式：TOML（v0.1 实际落地的唯一格式）；JSONC 兼容与 fastfetch schema 适配层绑定，一起排到 v0.6；JSON 仅作输出
 - 动态配置：明确排除，不做脚本引擎
 - 输出：终端彩色 + JSON
 - 许可证：MIT OR Apache-2.0（Rust 生态惯例）
@@ -61,8 +61,7 @@
 | `clap` | 4.6（derive） | 3 | CLI 解析 |
 | `serde` + `serde_json` | 1 / 1 | 2、6 | 配置与 JSON 输出 |
 | `toml` | 1.1 | 2 | 主配置解析/生成（注意：生态里大量教程仍是 0.8 写法） |
-| `jsonc-parser` | 0.33 | 2（feature `jsonc`） | JSONC 兼容 |
-| `etcetera` | 0.11 | 2 | XDG 路径解析 |
+| `jsonc-parser` | 0.33 | v0.6（feature `jsonc`） | JSONC 兼容，与 fastfetch 适配层同期落地 |
 | `anstyle` + `anstream` | 1.0 / 1.0 | 5 | 颜色与非 TTY 自动降级 |
 | `unicode-width` | 0.2.2 | 5 | 显示宽度对齐 |
 | `rustix` | 1.1（features `fs`, `system`） | 4 | `statvfs`、`uname` 等系统调用的安全封装 |
@@ -70,13 +69,14 @@
 | `ureq` | 3.4（feature `net`，默认关） | 8 | 唯一的联网模块（公网 IP） |
 
 **明确不引**：`sysinfo`（除非将来确需进程列表）、`rayon` / `crossbeam`、任何 async runtime、
-`inventory` / `linkme`（模块注册用静态数组即可，不要编译期魔法）。
+`inventory` / `linkme`（模块注册用静态数组即可，不要编译期魔法）、
+`etcetera`（XDG 路径自己写十几行，用库会让路径解析无法测试，见 §0-4）。
 
 ### 2.2 配置语言
 
 - **主配置 TOML**：Rust 生态最好、支持注释、手写友好、无 YAML 隐式类型坑、无 JSON 无注释问题。
   `toml = "1"`（不是 0.8）。
-- **兼容 JSONC**：仅指**语法**上的「JSON + 注释 + 尾逗号」，用 `jsonc-parser` 解析后映射到同一套内部结构。
+- **兼容 JSONC（推迟到 v0.6）**：仅指**语法**上的「JSON + 注释 + 尾逗号」，用 `jsonc-parser` 解析后映射到同一套内部结构。阶段 2 只做 TOML——在适配层存在之前，独立的 JSONC 解析器服务不了任何人（见下方 ⚠️）。
 - **输出 JSON**：仅用于 `--json`，不作为手写配置。建议同时带一个输出 schema 版本号。
 - **排除**：YAML、RON、KDL、动态脚本。
 
@@ -91,13 +91,23 @@
 
 第一版只做「用户配置覆盖默认值」，不做多层系统级合并（`/etc/vitals/` 之类留到 v1.0 再议）。
 
+阶段 2 落地的细则（每条都有测试守着）：
+
+- **显式路径读不到就报错，默认路径读不到就静默用默认**：`--config x.toml` 指了个不存在的文件必须说；
+  而 `~/.config/vitals/config.toml` 不存在是第一次运行的常态，不该报错。
+- **`modules` 一旦出现就整体替换**，不是追加：列表逐项合并说不清顺序与去重。
+- **`config_version` 省略按当前版本算；高于当前版本直接报错**，低于的暂时接受（还没有迁移要跑）。
+- **连 `HOME` 都没有时也用内置默认**，不报错。
+
 ### 2.4 配置结构原则
 
 - 用数组表保证模块顺序
-- 模块用类型标签区分
+- 模块用类型标签区分，且类型标签是**枚举**而非自由字符串——写错一个字母 serde 就报
+  ``unknown variant `cpuu`, expected one of ...``，把合法取值一并列出来
 - **未知字段报错**（`#[serde(deny_unknown_fields)]`），避免拼写错误静默通过
-- 带版本字段，为将来迁移留口
-- 每个模块可带声明式条件字段
+- 带版本字段，为将来迁移留口（叫 `config_version`，不叫 `version`，免得和应用版本混淆）
+- 每个模块可带声明式条件字段——**阶段 7 才进 schema**：在那之前写了就是未知字段报错，
+  好过出现「解析通过但什么也没做」的字段
 
 ### 2.5 声明式条件
 

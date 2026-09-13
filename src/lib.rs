@@ -7,12 +7,13 @@
 //! - **自有代码零 `unsafe`**：系统调用一律经 `rustix` 的安全封装。
 //! - **模块布局**：一律「自名文件 + 同名目录」，禁止 `mod.rs`。
 //!
-//! 结构上分成两层：`core` 是那四个抽象，`collectors`（阶段 4）是具体模块。
-//! 依赖方向单一——模块依赖核心，核心不认识任何模块。
+//! 结构上分成三层：`core` 是四个抽象，`config` 是配置，`collectors`（阶段 4）是具体模块。
+//! 依赖方向单一——模块依赖核心与配置，核心不认识任何模块。
 
 #![forbid(unsafe_code)]
 #![warn(clippy::mod_module_files)]
 
+pub mod config;
 pub mod core;
 
 pub use crate::core::collector::{CollectError, Collector, Context, ModuleName, Platform};
