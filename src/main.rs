@@ -111,6 +111,14 @@ fn render(settings: &Settings) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // `--sources` 说依据：每个模块**实际读了哪些文件**。记录发生在读取那一层
+    // （`collectors::read`），所以它说的是实际发生的事，不是一张可能过期的来源表。
+    if settings.sources {
+        print_sources(&settings.modules, &plan, &outcome);
+
+        return ExitCode::SUCCESS;
+    }
+
     // Logo：auto 按发行版匹配；none 不画；给了名字就用名字，找不到退回通用那张。
     let entry = match &settings.logo {
         LogoChoice::None => None,
@@ -213,5 +221,40 @@ fn explain(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcom
             };
 
         println!("{name:width$}  {state}  {detail}");
+    }
+}
+
+/// `--sources` 的报告：每个模块实际读过哪些文件。
+///
+/// 它是运行时记录下来的（见 `core::sources`），不是每个模块手写的一张表——表会跟代码
+/// 漂移，记录不会。一个模块如果什么文件都没碰（数据来自环境变量或系统调用），这里会
+/// **明说没有**，而不是编一个来源出来。
+fn print_sources(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcome) {
+    let width = modules
+        .iter()
+        .map(|entry| entry.module_type.name().len())
+        .max()
+        .unwrap_or(0);
+
+    for entry in modules {
+        let name = entry.module_type.name();
+
+        if let Some(skipped) = plan.skipped.iter().find(|item| item.module == name) {
+            println!("{name:width$}  跳过  {}", skipped.reason.describe());
+
+            continue;
+        }
+
+        let paths = outcome
+            .sources
+            .iter()
+            .find(|item| item.module == name)
+            .map_or(&[][..], |item| item.paths.as_slice());
+
+        if paths.is_empty() {
+            println!("{name:width$}  没有读文件  （数据来自环境变量或系统调用）");
+        } else {
+            println!("{name:width$}  {}", paths.join(", "));
+        }
     }
 }

@@ -9,6 +9,7 @@
 
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
+use crate::core::sources;
 
 /// 一次调度的结果。
 ///
@@ -20,6 +21,8 @@ pub struct RunOutcome {
     pub entries: Vec<Info>,
     /// 失败的模块。空表示这次全部正常。
     pub failures: Vec<Failure>,
+    /// 每个模块**实际读了哪些文件**（运行时记录，见 `core::sources`）。
+    pub sources: Vec<ModuleSources>,
 }
 
 impl RunOutcome {
@@ -42,6 +45,18 @@ pub struct Failure {
     pub module: String,
     /// 失败原因。
     pub error: CollectError,
+}
+
+/// 一个模块实际读了哪些文件。
+///
+/// `paths` 为空是正常情况：数据可能来自环境变量或系统调用（`uptime`、`hostname`）。
+/// 报告里会照实说「没有读文件」，而不是编一个来源出来。
+#[derive(Debug, Default)]
+pub struct ModuleSources {
+    /// 模块名。
+    pub module: String,
+    /// 碰过的路径，按首次碰到的顺序。
+    pub paths: Vec<String>,
 }
 
 /// 模块调度器。
@@ -76,11 +91,19 @@ impl<'a> Dispatcher<'a> {
                 continue;
             };
 
+            // 每个模块开始前清空记录、跑完取走：来源归属不会串到下一个模块。
+            sources::clear();
+
             match collector.collect(ctx) {
                 // 空 Vec 走到这里也一样：extend 什么都不做，不留痕。
                 Ok(entries) => outcome.entries.extend(entries),
                 Err(error) => outcome.push_failure(collector.name(), error),
             }
+
+            outcome.sources.push(ModuleSources {
+                module: collector.name().to_owned(),
+                paths: sources::take(),
+            });
         }
 
         outcome

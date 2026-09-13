@@ -410,3 +410,38 @@ fn explain_reports_every_module_and_its_state() {
     assert!(lines[1].contains("显示"), "OS 一定有数据：{text:?}");
     assert!(!lines[1].contains("空"), "{text:?}");
 }
+
+#[test]
+fn sources_reports_the_files_each_module_actually_read() {
+    let output = vitals(&["--sources", "--module", "os,host"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let text = stdout(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "两项配置该有两行：{text:?}");
+
+    // 每行要么给路径、要么明说「没有读文件」——不编来源。
+    for line in &lines {
+        assert!(
+            line.contains("没有读文件") || line.contains('/'),
+            "来源行要么给路径、要么明说没有：{line:?}"
+        );
+    }
+
+    let os_line = lines
+        .iter()
+        .find(|line| line.starts_with("os"))
+        .expect("没有 os 那一行");
+    assert!(
+        os_line.contains("os-release"),
+        "os 的来源里该有 os-release：{os_line:?}"
+    );
+
+    // 来源是**运行时记录**的，所以不会串模块：os 那行不该出现 host 的 DMI 路径。
+    // 这一条同时守着「每个模块开始时清空记录」这个前提。
+    assert!(
+        !os_line.contains("/dmi/"),
+        "来源串到别的模块了：{os_line:?}"
+    );
+}

@@ -68,6 +68,13 @@ pub struct Cli {
     /// 要分辨「空」与「显示」，它得真跑一遍采集，所以会花一次采集的时间。
     #[arg(long)]
     pub explain: bool,
+
+    /// 每个模块**实际读了哪些文件**（运行时记录，不是手写的来源表）。
+    ///
+    /// 与 `--explain` 的分工：`--explain` 说状态（显示 / 空 / 跳过 / 失败），
+    /// `--sources` 说依据（读了哪个文件）。两个都给就先打状态、再打依据。
+    #[arg(long)]
+    pub sources: bool,
 }
 
 /// Logo 的选择。
@@ -141,6 +148,8 @@ pub struct Settings {
     pub verbose: bool,
     /// `--explain`：打印逐项诊断后结束，不渲染画面。
     pub explain: bool,
+    /// `--sources`：打印每个模块实际读过的文件。
+    pub sources: bool,
 }
 
 impl Settings {
@@ -172,6 +181,7 @@ impl Settings {
             json: cli.json,
             verbose: cli.verbose,
             explain: cli.explain,
+            sources: cli.sources,
         }
     }
 

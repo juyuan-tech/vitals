@@ -9,6 +9,7 @@
 use std::io::ErrorKind;
 
 use crate::core::collector::CollectError;
+use crate::core::sources;
 
 /// 读一个文件，并去掉首尾空白。
 ///
@@ -16,6 +17,8 @@ use crate::core::collector::CollectError;
 /// - 文件不存在 → `Ok(None)`，这是**无数据**，不是错误
 /// - 其他失败（权限、编码、是目录）→ `Err`，这是**真失败**，主流程会记一条警告
 pub fn text(path: &str) -> Result<Option<String>, CollectError> {
+    sources::record(path);
+
     match std::fs::read_to_string(path) {
         Ok(content) => Ok(Some(content.trim().to_owned())),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
@@ -28,6 +31,8 @@ pub fn text(path: &str) -> Result<Option<String>, CollectError> {
 /// 和 [`text`] 同一套错误规矩：不存在是**无数据**，其他失败是**真失败**。
 /// 二进制内容（EDID、DMI 条目）走这条——它们不是 UTF-8，用 [`text`] 读会失败。
 pub fn bytes(path: &str) -> Result<Option<Vec<u8>>, CollectError> {
+    sources::record(path);
+
     match std::fs::read(path) {
         Ok(content) => Ok(Some(content)),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),

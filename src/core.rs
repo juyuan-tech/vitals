@@ -9,3 +9,4 @@ pub mod collector;
 pub mod dispatch;
 pub mod info;
 pub mod render;
+pub mod sources;
