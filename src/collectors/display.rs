@@ -434,3 +434,58 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod fuzz_tests {
+    use super::*;
+
+    /// 畸形 EDID 不 panic。
+    ///
+    /// EDID 是从 `/sys/class/drm/*/edid` 读来的：正常是显示器给的 128/256 字节，
+    /// 但字节内容不归内核校验，损坏的显示器、虚拟显示驱动都可能给出任意内容。
+    /// 这里喂随机字节、全 0、全 0xFF（长度字段最容易是 0xFFFF），
+    /// 再把真机那块屏的 EDID 逐长度截断。
+    #[test]
+    fn malformed_edid_never_panics() {
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+
+        let mut inputs: Vec<Vec<u8>> = Vec::new();
+
+        for length in 0..300 {
+            let mut bytes = vec![0u8; length];
+            for byte in bytes.iter_mut() {
+                *byte = (next() & 0xff) as u8;
+            }
+            inputs.push(bytes);
+        }
+
+        inputs.push(Vec::new());
+        inputs.push(vec![0xff; 128]);
+        inputs.push(vec![0xff; 256]);
+        inputs.push(vec![0; 128]);
+
+        // 真机那块屏的 EDID（拿不到就跳过：测试不该依赖某个具体显示器）。
+        let real = std::fs::read("/sys/class/drm/card0-eDP-1/edid")
+            .ok()
+            .filter(|bytes| !bytes.is_empty());
+        if let Some(real) = real {
+            for length in 0..=real.len() {
+                inputs.push(real[..length].to_vec());
+            }
+        }
+
+        for bytes in &inputs {
+            let _ = name_of(bytes);
+            let _ = physical_size_mm(bytes);
+            let _ = refresh_exact(bytes, 1920, 1200);
+            let _ = refresh_exact(bytes, 0, 0);
+            let _ = refresh_exact(bytes, u32::MAX, u32::MAX);
+        }
+    }
+}

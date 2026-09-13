@@ -531,3 +531,46 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod fuzz_tests {
+    use super::*;
+
+    /// 畸形 efivar 字节不 panic。
+    ///
+    /// 这些缓冲是「属性头 + 长度字段 + 变长负载」的形状，长度字段来自文件内容本身，
+    /// 所以 0xFFFF 这类值必须只是「没有数据」，不能变成越界或 panic。
+    #[test]
+    fn malformed_efivars_never_panic() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+
+        let mut inputs: Vec<Vec<u8>> = Vec::new();
+
+        for length in 0..200 {
+            let mut bytes = vec![0u8; length];
+            for byte in bytes.iter_mut() {
+                *byte = (next() & 0xff) as u8;
+            }
+            inputs.push(bytes);
+        }
+
+        // 长度字段拉满的几种写法：属性头 + u16/全 0xFF。
+        inputs.push(vec![0xff; 8]);
+        inputs.push(vec![0xff; 64]);
+        inputs.push(vec![0; 64]);
+        inputs.push(vec![0x07, 0, 0, 0]);
+
+        for bytes in &inputs {
+            let _ = boot_current(bytes);
+            let _ = load_option(bytes);
+            let _ = file_path(bytes);
+            let _ = utf16_field(bytes);
+        }
+    }
+}

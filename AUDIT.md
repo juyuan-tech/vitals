@@ -24,6 +24,13 @@
   属模块本分。）
 - 差分算术：四个采样模块全部用 `checked_sub`，计数器倒退即「无数据」而不是下溢。
 
+静态 + 确定性畸形输入测试（不是覆盖率驱动的 fuzz，但每个字节级解析器都过一遍）：
+
+- TZif、utmp 记录、EDID、efivar 四个字节级解析器：随机字节跨长度、结构合法文件逐长度截断、
+  逐位翻转、极端时间戳/偏移/长度字段（0xFFFF 拉满），能拿到真机样本的再喂一份真的
+  （`/usr/share/zoneinfo/UTC`、`/sys/class/drm/*/edid`，拿不到就跳过）。
+  这轮首跑就命中了 F8。
+
 动态（实测，不是读代码推测）：
 
 - `HOME`/`TZ` 注入与路径穿越（见 F1/F2）；9 MiB 稀疏文件测读取上限（F3）；
@@ -169,14 +176,18 @@ attempt to add with overflow
   EDID 用 `get(range)?` 取窗口再做字段索引；`tzif` **完全不做按文件头计数分配**
   （源码里没有 `Vec`/`with_capacity`），只在切片上按偏移读。
 - 采样模块的差分全用 `checked_sub`，计数器倒退 → 无数据，不会下溢或说谎。
+- **整数除法不存在除零 panic**：三处会除 `elapsed_ms` 的吞吐计算（`net_io`、`disk_io`、
+  `top`）都在采样窗口处先判 `elapsed_ms == 0`，各自的 `rate()` 里还有第二道；哪怕窗口
+  被算成 0，结果也是「量不到」而不是崩溃。其余除法要么是常量除数（时间换算、`/ 100`），
+  要么是浮点（`f64` 除零得到 `inf`/`NaN`，不 panic）。
 - `--json` 的控制字符由 `serde_json` 转义，不会漏成裸字节。
 
 ## 未覆盖（如实列出）
 
-- **模糊测试是确定性的、不是覆盖率驱动的**：已给两个字节级解析器（TZif、utmp 记录）补上
-  畸形输入测试——随机字节跨所有长度、合法文件逐长度截断、逐位翻转、极端时间戳与极端偏移，
-  外加一份真机 `/usr/share/zoneinfo/UTC`（拿不到就跳过）。首轮就命中了 F8。但这不是
-  libFuzzer/AFL 那种覆盖率引导的 fuzz，EDID、efivar 等其余解析器仍只有手工夹具。
+- **模糊测试是确定性的、不是覆盖率驱动的**：四个字节级解析器（TZif、utmp 记录、EDID、
+  efivar）已有畸形输入测试，首轮就命中了 F8。但这不是 libFuzzer/AFL 那种覆盖率引导的
+  fuzz，覆盖不到「只有变异几十亿次才会踩到的路径」。文本类解析器（INI、TOML、`/proc`
+  各表）仍只有手工构造的夹具。
 - **没有第三方静态分析**：只用了 `clippy --all-targets -D warnings`，没跑
   MIRI / cargo-deny / coverity 一类。自有一行 `unsafe` 也没有（`forbid`），MIRI 收益有限。
 - **F4 里「线程起不来」那条降级分支没有自动化测试**：要可靠造出「`spawn` 失败」得
@@ -191,4 +202,6 @@ attempt to add with overflow
 | --- | --- |
 | `61a82aa` | F1 转义注入 + F2 `$TZ` 穿越 + F3 读取上限 |
 | `35db727` | F4 采集线程数上限 |
-| 本提交 | 审计报告 + F6 CI 增加 MSRV 作业 |
+| `bf27a1d` | 审计报告 + F6 CI 增加 MSRV 作业 |
+| `b5adc3b` | 畸形输入测试（TZif、utmp），命中并修复 F8 |
+| 本提交 | 畸形输入测试扩展到 EDID 与 efivar + 除零核验 |
