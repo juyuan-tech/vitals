@@ -146,3 +146,49 @@ fn gen_config_prints_a_parseable_template() {
     assert!(text.contains("config_version"));
     assert!(text.contains("[[modules]]"));
 }
+
+// ---------------------------------------------------------------------------
+// `--json`：阶段 6 的验收，`vitals --json | jq` 必须可用
+// ---------------------------------------------------------------------------
+
+#[test]
+fn json_output_is_valid_json() {
+    let output = vitals(&["--json"]);
+
+    assert!(output.status.success());
+    let document: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("--json 的输出必须是合法 JSON");
+
+    assert_eq!(document["schema_version"], 1);
+    assert_eq!(document["entries"][0]["type"], "os", "顺序跟着配置走");
+    assert!(document["failures"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn json_drops_the_logo_and_the_colors() {
+    // 这一份是给程序看的：没有画面，也没有转义码。
+    let text = stdout(&vitals(&["--json"]));
+
+    assert!(!text.contains('\u{1b}'));
+    assert!(!text.contains("`ooo/`"), "JSON 里不该出现 Logo：\n{text}");
+}
+
+#[test]
+fn json_respects_the_module_filter() {
+    let output = vitals(&["--json", "--module", "os"]);
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let entries = document["entries"].as_array().unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["type"], "os");
+}
+
+#[test]
+fn json_still_reports_errors_on_stderr() {
+    // 诊断走 stderr、结果走 stdout——两者互不干扰，喂给 jq 的仍是干净的 JSON。
+    let output = vitals(&["--json", "--config", "/nonexistent/vitals.toml"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout(&output).is_empty());
+    assert!(stderr(&output).contains("读取配置文件"));
+}

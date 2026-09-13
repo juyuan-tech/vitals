@@ -41,7 +41,7 @@ fn entries() -> Vec<Info> {
 fn render_raw(renderer: &TextRenderer, logo: Option<&Logo>, entries: &[Info]) -> Vec<u8> {
     let mut buffer = Vec::new();
     renderer
-        .render(&Report::new(logo, entries), &mut buffer)
+        .render(&Report::new(logo, entries, &[]), &mut buffer)
         .expect("写进内存不会失败");
 
     buffer
@@ -56,7 +56,7 @@ fn render(renderer: &TextRenderer, logo: Option<&Logo>, entries: &[Info]) -> Str
     {
         let mut stream = AutoStream::new(&mut buffer, ColorChoice::Never);
         renderer
-            .render(&Report::new(logo, entries), &mut stream)
+            .render(&Report::new(logo, entries, &[]), &mut stream)
             .expect("写进内存不会失败");
         stream.flush().unwrap();
     }

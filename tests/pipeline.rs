@@ -179,7 +179,7 @@ fn pipeline_collect_then_render() {
     let outcome = dispatcher().run(&["alpha", "delta"], &context());
     assert!(outcome.failures.is_empty());
 
-    let report = Report::new(Some(&ARCH), &outcome.entries);
+    let report = Report::new(Some(&ARCH), &outcome.entries, &[]);
     let mut buffer = Vec::new();
     RecordingRenderer.render(&report, &mut buffer).unwrap();
 
@@ -190,7 +190,7 @@ fn pipeline_collect_then_render() {
 #[test]
 fn no_logo_means_no_logo_block() {
     let outcome = dispatcher().run(&["alpha"], &context());
-    let report = Report::new(None, &outcome.entries);
+    let report = Report::new(None, &outcome.entries, &[]);
 
     let mut buffer = Vec::new();
     RecordingRenderer.render(&report, &mut buffer).unwrap();
@@ -214,7 +214,7 @@ fn render_errors_reach_the_caller() {
     }
 
     let outcome = dispatcher().run(&["alpha"], &context());
-    let report = Report::new(None, &outcome.entries);
+    let report = Report::new(None, &outcome.entries, &[]);
 
     let error = RecordingRenderer
         .render(&report, &mut FailingWriter)

@@ -15,6 +15,7 @@ use vitals_rs::collectors::os_release;
 use vitals_rs::config::{self, ModuleType};
 use vitals_rs::core::dispatch::Failure;
 use vitals_rs::core::render::{RenderError, Renderer, Report};
+use vitals_rs::render::json::JsonRenderer;
 use vitals_rs::render::logo;
 use vitals_rs::render::text::TextRenderer;
 use vitals_rs::render::theme::Theme;
@@ -93,7 +94,19 @@ fn render(settings: &Settings) -> ExitCode {
         LogoChoice::Auto => Some(logo::for_release(release.as_ref())),
         LogoChoice::Named(name) => Some(logo::find(name).unwrap_or(&logo::GENERIC)),
     };
-    let report = Report::new(entry.map(|entry| &entry.logo), &outcome.entries);
+    let report = Report::new(
+        entry.map(|entry| &entry.logo),
+        &outcome.entries,
+        &outcome.failures,
+    );
+
+    // 两个渲染器平级，谁也不包谁：文本给人看，JSON 给脚本看。
+    // `Settings::resolve` 已经替 `--json` 关掉了 Logo 与颜色，这里只管挑一个。
+    let renderer: Box<dyn Renderer> = if settings.json {
+        Box::new(JsonRenderer)
+    } else {
+        Box::new(TextRenderer::new(Theme::default()))
+    };
 
     // anstream 负责降级：不是终端（或 `--no-color`）时它会把转义码剥掉。
     let mut out = AutoStream::new(
@@ -105,7 +118,7 @@ fn render(settings: &Settings) -> ExitCode {
         },
     );
 
-    match TextRenderer::new(Theme::default()).render(&report, &mut out) {
+    match renderer.render(&report, &mut out) {
         Ok(()) => ExitCode::SUCCESS,
         // 下游主动关掉管道（`vitals | head -1`）不算错误，安静收场——
         // 这是 Unix 的惯例，为它印一句错只会盖住真正的失败。

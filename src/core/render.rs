@@ -2,6 +2,7 @@
 
 use std::io::Write;
 
+use crate::core::dispatch::Failure;
 use crate::core::info::Info;
 
 /// 一个渲染器。
@@ -28,13 +29,23 @@ pub struct Report<'a> {
     pub logo: Option<&'a Logo>,
     /// 采集结果，顺序即显示顺序。
     pub entries: &'a [Info],
+    /// 失败的模块。
+    ///
+    /// 之所以也交给渲染器，是因为**两种渲染器处理它的方式不同**：
+    /// 文本渲染器把它印到 stderr（诊断不该混进结果里），
+    /// JSON 渲染器把它放进文档的 `failures`（读 stdout 的脚本不该被迫再去解析 stderr）。
+    pub failures: &'a [Failure],
 }
 
 impl<'a> Report<'a> {
     /// 组装一份渲染输入。
     #[must_use]
-    pub const fn new(logo: Option<&'a Logo>, entries: &'a [Info]) -> Self {
-        Self { logo, entries }
+    pub const fn new(logo: Option<&'a Logo>, entries: &'a [Info], failures: &'a [Failure]) -> Self {
+        Self {
+            logo,
+            entries,
+            failures,
+        }
     }
 }
 

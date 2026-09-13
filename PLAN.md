@@ -64,7 +64,7 @@
 | `jsonc-parser` | 0.33 | v0.6（feature `jsonc`） | JSONC 兼容，与 fastfetch 适配层同期落地 |
 | `anstyle` + `anstream` | 1.0 / 1.0 | 5 | 颜色与非 TTY 自动降级 |
 | `unicode-width` | 0.2.2 | 5 | 显示宽度对齐 |
-| `rustix` | 1.1（features `fs`, `system`） | 4 | `statvfs`、`uname` 等系统调用的安全封装 |
+| `rustix` | 1.1（features `fs`, `system`, `termios`） | 4、5 | `statvfs`、`uname`、`tcgetwinsize` 等系统调用的安全封装 |
 | `insta` | 1.48（dev） | 11 | 渲染快照测试 |
 | `ureq` | 3.4（feature `net`，默认关） | 8 | 唯一的联网模块（公网 IP） |
 
@@ -354,6 +354,11 @@ CPU 模块只负责：型号、物理/逻辑核心数（必要时加频率）。
 - 只输出**采到的**条目；失败的模块进 `failures`，不混进 `entries`
   ——脚本不该把一条错误当成一条信息去读
 - 没有采集结果时是空数组，不是 `null`（`jq '.entries[]'` 不该炸）
+- 带缩进、末尾有换行：人也会扫一眼（`vitals --json | head`），`jq` 两种都吃
+- `variables`（模板变量）暂不进 JSON。那是 v0.3 模板特性的形状，
+  等到那时再定；现在冻结它只会锁死一个还没设计过的格式
+- 形状不在 `Info` 上 derive `Serialize`，而是渲染器自己定义一个 `Entry`：
+  JSON 的键名与字段取舍是**渲染器的事**，核心接口不该为了输出的方便而依赖 serde
 
 ---
 
