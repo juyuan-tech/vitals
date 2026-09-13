@@ -317,25 +317,26 @@ Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapt
 | **第四批** | DateTime、Colors | TZif 自己解析（`localtime_r` 是 unsafe，禁止）；Colors 由渲染器算 | DateTime ✅ / Colors ⏳ |
 | **第五批** | Gpu、LocalIp、Wifi、Users、PhysicalMemory、PhysicalDisk | Gpu：`/sys/class/drm` + `pci.ids`（没有就报原始 ID）；网络要开 `rustix` 的 `net` feature；Users 读 utmp；PhysicalMemory 读 DMI type 17 | ✅ 5（PhysicalMemory 只读得到非 root 的槽位，见 §5.7） |
 | **第六批** | OpenGL、Vulkan、OpenCL、Codec、Sound、Media、Player、Wallpaper、Camera、Gamepad、Mouse、Keyboard、Bluetooth | 多数要 ioctl / D-Bus / 设备树；**要开子进程的一律挂 `when-command-exists`**，且先问「这个值值不值得为它 fork」 | Sound ✅、Camera ✅、Keyboard ✅、Mouse ✅、Gamepad ✅；opengl/vulkan/opencl/codec 定为核心外（§5.7）；Bluetooth 部分可做；Media/Player/Wallpaper 待定 |
-| **第七批** | NetIO、DiskIO、CPUUsage、Top、Btrfs、Zpool | 前四个是**差值采样**（两次读取加间隔，`CPUUsage` 的 Linux 实现若只读一次 `/proc/stat` 就只是「开机至今平均」，必须写明口径）；后两个读 `/sys/fs/btrfs`、`/proc/spl` | NetIO/DiskIO/CPUUsage/Top ⏳（在隔离副本里做）、Btrfs ✅、Zpool 本机无 ZFS 验不了 |
+| **第七批** | NetIO、DiskIO、CPUUsage、Top、Btrfs、Zpool | 前四个是**差值采样**（两次读取加间隔，`CPUUsage` 的 Linux 实现若只读一次 `/proc/stat` 就只是「开机至今平均」，必须写明口径）；后两个读 `/sys/fs/btrfs`、`/proc/spl` | NetIO/DiskIO/CPUUsage/Top ✅（窗口 200 ms，upstream 是 500；**四个模块各睡各的共 ~850 ms**，upstream 有 prepare 阶段先取全部基线再一起睡，~510 ms——这条待做）、Btrfs ✅、Zpool 本机无 ZFS 验不了 |
 | **第八批** | PublicIp、Weather | 要 `net` feature（`ureq`） | ⏳ |
 | **不属于模块** | Logo（查询内置 Logo，给 JSON 用）、Separator/Break（渲染原语，见 §6.1） | | |
 
 ### 5.5 fastfetch 2.68.1 的模块名（`fastfetch --list-modules` 实测）
 
-本机装的 fastfetch 自己列出的 76 项，是这份清单的**权威来源**。已经做掉 **55** 个
-（见 `COLLECTORS` 的长度），剩下 **21** 个（按它给的顺序）：
+本机装的 fastfetch 自己列出的 76 项，是这份清单的**权威来源**。已经做掉 **59** 个
+（见 `COLLECTORS` 的长度），剩下 **17** 个（按它给的顺序）：
 
 `Bluetooth`、`BluetoothRadio`、`CPUUsage`、`Codec`、`Colors`、`Command`、`Custom`、
-`DiskIO`、`Gamepad`、`Media`、`Monitor`、`NetIO`、`OpenCL`、`OpenGL`、`PhysicalMemory`、
-`Player`、`PublicIp`、`TerminalTheme`、`Top`、`Vulkan`、`Wallpaper`、`Weather`、`Zpool`
+`Media`、`Monitor`、`OpenCL`、`OpenGL`、`PhysicalMemory`、`Player`、`PublicIp`、
+`TerminalTheme`、`Vulkan`、`Wallpaper`、`Weather`、`Zpool`
 
-> 上面这份 21 项是 23 个名字里减去 `Gamepad`（本轮已接）与 `Mouse`/`Keyboard` 等已完成项后的
-> 剩余清单。其中**真能做的**：`Colors`（渲染器算）、`Monitor`（`Display` 的另一半，需要单独一套
-> 键）、`Custom`（用户给的值，不起进程）、`TerminalTheme`（读终端自己的配置文件）、
-> `Wallpaper`（读合成器的配置文件）；**在隔离副本里做着的**：`NetIO`/`DiskIO`/`CPUUsage`/`Top`；
+> 上面这份 17 项是 76 减去已完成的 59。其中**真能做的**：`Colors`（渲染器算）、
+> `Monitor`（`Display` 的另一半，需要单独一套键）、`Custom`（用户给的值，不起进程）、
+> `TerminalTheme`（读终端自己的配置文件）、`Wallpaper`（读合成器的配置文件）、
+> `Bluetooth`（只做连接状态与电量，名字要 ioctl/D-Bus，见 §5.7）；
 > **定为核心外**（理由逐条记在 §5.7）：`OpenGL`/`Vulkan`/`OpenCL`/`Codec`、`PhysicalMemory`
-> 的完整值、`PublicIp`/`Weather`、`Zpool`、`Media`/`Player`、`Bluetooth`/`BluetoothRadio` 的大部分。
+> 的完整值、`PublicIp`/`Weather`、`Zpool`、`Media`/`Player`、`Command`（`Custom` 可用，
+> `Command` 按定义要起 shell）。
 
 三条从这份清单里读出来的事实：
 

@@ -330,11 +330,19 @@ pub enum ModuleType {
     Mouse,
     /// 游戏手柄。
     Gamepad,
+    /// 网卡收发速率。
+    NetIo,
+    /// 物理盘读写速率。
+    DiskIo,
+    /// CPU 占用率。
+    CpuUsage,
+    /// CPU 占用最高的进程。
+    Top,
 }
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 55] = [
+    pub const ALL: [Self; 59] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -390,6 +398,10 @@ impl ModuleType {
         Self::Keyboard,
         Self::Mouse,
         Self::Gamepad,
+        Self::NetIo,
+        Self::DiskIo,
+        Self::CpuUsage,
+        Self::Top,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
@@ -403,6 +415,11 @@ impl ModuleType {
     /// 后来补进来的 `bootmgr` 与 `local-ip` 也在 fastfetch 的默认视图里：
     /// 前者紧跟 `chassis`，后者在 `disk` 之后、`battery` 之前。`users` 与
     /// `physical-disk` 不进默认视图（fastfetch 默认也不显示它们）。
+    ///
+    /// `net-io`/`disk-io`/`cpu-usage`/`top` 同样**不进**默认视图：本机实测
+    /// `fastfetch --pipe true -l none` 的默认输出里没有这四个键
+    /// （Network I/O、Disk I/O、CPU Usage、Top Processes）。
+    /// 它们都要「采样两次」，默认就无条件让整体慢 200 ms 说不过去。
     pub const DEFAULT: [Self; 22] = [
         Self::Title,
         Self::Separator,
@@ -491,6 +508,10 @@ impl ModuleType {
             Self::Keyboard => "keyboard",
             Self::Mouse => "mouse",
             Self::Gamepad => "gamepad",
+            Self::NetIo => "net-io",
+            Self::DiskIo => "disk-io",
+            Self::CpuUsage => "cpu-usage",
+            Self::Top => "top",
         }
     }
 }

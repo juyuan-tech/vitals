@@ -31,10 +31,12 @@ pub mod camera;
 pub mod chassis;
 pub mod cpu;
 pub mod cpu_cache;
+pub mod cpu_usage;
 pub mod cursor;
 pub mod date_time;
 pub mod de;
 pub mod disk;
+pub mod disk_io;
 pub mod display;
 pub mod dmi;
 pub mod dns;
@@ -58,6 +60,7 @@ pub mod locale;
 pub mod meminfo;
 pub mod memory;
 pub mod mouse;
+pub mod net_io;
 pub mod os;
 pub mod os_release;
 pub mod packages;
@@ -79,6 +82,7 @@ pub mod terminal_font;
 pub mod terminal_size;
 pub mod theme;
 pub mod title;
+pub mod top;
 pub mod tpm;
 pub mod tty;
 pub mod units;
@@ -156,4 +160,8 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &keyboard::Keyboard,
     &mouse::Mouse,
     &gamepad::Gamepad,
+    &net_io::NetIo,
+    &disk_io::DiskIo,
+    &cpu_usage::CpuUsage,
+    &top::Top,
 ];
