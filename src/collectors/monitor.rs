@@ -25,14 +25,9 @@ use crate::core::info::Info;
 /// 显示器物理参数。
 pub struct Monitor;
 
-/// 屏幕对角线英寸数：`sqrt(w² + h²)` 毫米再换英寸。
-fn inches(width_mm: u32, height_mm: u32) -> f64 {
-    f64::hypot(f64::from(width_mm), f64::from(height_mm)) / 25.4
-}
-
 /// 每英寸像素数。`6.98 inches` 这种假长度不算，所以分母用同一个 `inches`。
 fn ppi(width: u32, height: u32, width_mm: u32, height_mm: u32) -> f64 {
-    f64::hypot(f64::from(width), f64::from(height)) / inches(width_mm, height_mm)
+    f64::hypot(f64::from(width), f64::from(height)) / display::inches(width_mm, height_mm)
 }
 
 impl Collector for Monitor {
@@ -56,15 +51,12 @@ impl Collector for Monitor {
                 continue;
             };
 
-            // 键里的名字用 EDID 的厂商+产品码（`SDC4197`）；EDID 里没有时退回连接器名
-            // （`eDP-1`）——`Display` 一直用后者，总比一行没有名字的键好。
-            let label = facts
-                .edid_name
-                .clone()
-                .unwrap_or_else(|| facts.connector.clone());
+            // 键里的名字与 `Display` 用同一个来源（`Facts::label`）：EDID 的厂商+产品码，
+            // 没有时退回连接器名——两个模块看到同一块屏时名字一定一致。
+            let label = facts.label().to_owned();
             let value = format!(
                 "{width}x{height} px @ {refresh:.3} Hz - {width_mm}x{height_mm} mm ({:.2} inches, {:.2} ppi)",
-                inches(width_mm, height_mm),
+                display::inches(width_mm, height_mm),
                 ppi(width, height, width_mm, height_mm),
             );
 
@@ -95,7 +87,10 @@ mod tests {
     #[test]
     fn the_diagonal_is_measured_from_both_sides() {
         // sqrt(300² + 190²) / 25.4 = 13.9837…，fastfetch 印 13.98。
-        assert_eq!(format!("{:.2}", inches(REAL_MM.0, REAL_MM.1)), "13.98");
+        assert_eq!(
+            format!("{:.2}", display::inches(REAL_MM.0, REAL_MM.1)),
+            "13.98"
+        );
     }
 
     #[test]

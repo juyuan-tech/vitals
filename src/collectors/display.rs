@@ -103,6 +103,22 @@ pub(crate) struct Facts {
     pub(crate) physical_mm: Option<(u32, u32)>,
 }
 
+impl Facts {
+    /// 这一行显示器的名字：优先用 EDID 的厂商+产品码（`SDC4197`，fastfetch 的口径），
+    /// EDID 里没有时退回连接器名（`eDP-1`）。`Display` 与 `Monitor` 都用它。
+    pub(crate) fn label(&self) -> &str {
+        self.edid_name.as_deref().unwrap_or(&self.connector)
+    }
+}
+
+/// 屏幕对角线英寸数：`sqrt(w² + h²)` 毫米再换英寸。
+///
+/// `Display` 要的是整寸（`in 14"`），`Monitor` 要两位小数（`13.98 inches`）——
+/// 同一个数的两种舍法，所以这里只给精确值。
+pub(crate) fn inches(width_mm: u32, height_mm: u32) -> f64 {
+    f64::hypot(f64::from(width_mm), f64::from(height_mm)) / 25.4
+}
+
 /// 取一个连接器的数据；没接东西返回 `None`。
 pub(crate) fn facts(connector: &Connector) -> Result<Option<Facts>, CollectError> {
     let status = read::text(&path_of(connector, "status"))?;
@@ -147,17 +163,22 @@ fn describe(connector: &Connector, module: &'static str) -> Result<Option<Info>,
         // 极少数连接器有状态却没报模式，这时至少让人看见它接着东西。
         None => "Connected".to_owned(),
     };
+    // 对角线（整寸）：fastfetch 印 `in 14"`，与 `Monitor` 的 `13.98 inches` 同一个数。
+    if let Some((width_mm, height_mm)) = facts.physical_mm {
+        value.push_str(&format!(" in {:.0}\"", inches(width_mm, height_mm)));
+    }
     // `Display` 印整数赫兹：EDID 的时钟是 10 kHz 量化的，多给三位小数是假精度。
     if let Some(refresh) = facts.refresh_hz.map(|hz| hz.round() as u32) {
-        value.push_str(&format!(" @ {refresh}Hz"));
+        value.push_str(&format!(", {refresh} Hz"));
     }
+    // 方括号、不是圆括号——这是它的口径。
     value.push_str(if facts.builtin {
-        " (Built-in)"
+        " [Built-in]"
     } else {
-        " (External)"
+        " [External]"
     });
 
-    let mut info = Info::new(module, format!("Display ({})", facts.connector), value)
+    let mut info = Info::new(module, format!("Display ({})", facts.label()), value)
         .with_variable("connector", facts.connector.clone());
     if let Some((width, height)) = facts.mode {
         info = info
