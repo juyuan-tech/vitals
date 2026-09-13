@@ -105,7 +105,12 @@ mod tests {
     fn the_value_is_shaped_like_fastfetch() {
         let entries = Monitor.collect(&Context::for_tests()).unwrap();
 
-        assert!(!entries.is_empty(), "本机至少有一块已连接且带 EDID 的屏");
+        // 无头机器（CI runner 就是）没有已连接且带 EDID 的屏。这时契约是「空，而不是报错」——
+        // 上面的 `unwrap()` 已经把「不是 Err」钉住了；本机有屏，所以本机这条会继续往下走。
+        // 别再往这里加「本机一定有屏」的断言：那是宿主硬件，不是被测代码。
+        if entries.is_empty() {
+            return;
+        }
         for info in &entries {
             assert_eq!(info.module, "monitor");
             assert!(
