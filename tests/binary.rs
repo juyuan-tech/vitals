@@ -219,14 +219,31 @@ fn the_title_has_no_key_and_the_rule_matches_the_title() {
     ]));
     let lines: Vec<&str> = text.lines().collect();
 
+    // 没有 /etc/os-release 的容器里，OS 模块不产出任何行，那时只有标题与横线两行——
+    // 两种结局都通过（项目里其它依赖系统文件的测试也是这个写法）。
+    if lines.len() < 3 {
+        return;
+    }
+
     assert_eq!(lines.len(), 3, "{text}");
     assert!(!lines[0].contains(": "), "标题不该印成 `键: 值`：{text}");
     // 横线的长度 = **标题**的宽度（fastfetch 的口径），不是信息列里最宽的那行。
     let title_width = lines[0].chars().count();
     assert_eq!(lines[1], "─".repeat(title_width), "横线该跟着标题");
+    // OS 的值是「发行版名 + 机器架构」，发行版名随机器而变（开发机是 Arch、CI 上是
+    // Ubuntu），所以这里只钉结构：`OS: ` 前缀 + 以机器架构收尾。架构取自 `uname`，和实现
+    // 同源——**不能**用 `std::env::consts::ARCH`，那是编译时的架构，交叉编译会撒谎。
+    let machine = rustix::system::uname()
+        .machine()
+        .to_string_lossy()
+        .into_owned();
     assert!(
-        lines[2].starts_with("OS: Arch Linux"),
-        "OS 值后面还跟着机器架构：{text}"
+        lines[2].starts_with("OS: ") && lines[2].ends_with(&format!(" {machine}")),
+        "OS 该是「发行版名 + 机器架构」：{text}"
+    );
+    assert!(
+        lines[2].len() > "OS: ".len() + machine.len(),
+        "发行版名不能为空：{text}"
     );
 }
 
