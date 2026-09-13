@@ -89,6 +89,7 @@ pub mod title;
 pub mod top;
 pub mod tpm;
 pub mod tty;
+pub mod tzif;
 pub mod units;
 pub mod uptime;
 pub mod user;

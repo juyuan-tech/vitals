@@ -163,149 +163,7 @@ fn offset_at(path: &str, now: i64) -> Result<Option<i32>, CollectError> {
         return Ok(None);
     };
 
-    Ok(parse(&bytes).and_then(|zone| zone.offset_at(now)))
-}
-
-/// 一个时区文件。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Zone {
-    /// 切换时刻（unix 秒），升序。
-    transitions: Vec<i64>,
-    /// 每次切换后生效的类型下标，与 `transitions` 一一对应。
-    types: Vec<u8>,
-    /// 类型表。
-    local: Vec<Local>,
-}
-
-/// 类型表里的一项。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Local {
-    /// 相对 UTC 的偏移（秒）。
-    offset: i32,
-}
-
-impl Zone {
-    /// `now` 时刻的偏移。
-    fn offset_at(&self, now: i64) -> Option<i32> {
-        // 切换表是按时间升序的，找最后一个不晚于 now 的切换。
-        let Some(index) = self
-            .transitions
-            .iter()
-            .rposition(|transition| *transition <= now)
-        else {
-            // 早于第一次切换（或者文件根本没有切换表，比如 UTC）：
-            // 用类型表的第一项。这比「当作 UTC」好——`Asia/Kolkata` 这类没有夏令时的
-            // 时区，类型表首项就是它唯一的偏移。
-            return self.local.first().map(|local| local.offset);
-        };
-
-        let kind = *self.types.get(index)?;
-        self.local.get(kind as usize).map(|local| local.offset)
-    }
-}
-
-/// 解析 TZif。
-///
-/// 只认版本 2/3/4 的第二份数据块；版本 1 的老文件（1980 年代的产物）直接返回 `None`——
-/// 现在的发行版不会装那种文件，为它写一套 32 位解析不划算。
-fn parse(bytes: &[u8]) -> Option<Zone> {
-    if bytes.len() < 44 || &bytes[..4] != b"TZif" {
-        return None;
-    }
-
-    let version = bytes[4];
-    if version == 0 {
-        return None;
-    }
-
-    // 第一份数据块是 32 位的，按它自己的计数跳过，才能到第二份。
-    let counts = Counts::parse(bytes, 0)?;
-    let second = counts.size(false);
-    let counts = Counts::parse(bytes, second)?;
-
-    let data = &bytes[second..];
-    let body = counts.size(true);
-    if data.len() < body {
-        return None;
-    }
-
-    let data = &data[44..];
-    let mut transitions = Vec::with_capacity(counts.transitions as usize);
-    for index in 0..counts.transitions as usize {
-        let start = index * 8;
-        let chunk = data.get(start..start + 8)?;
-        transitions.push(i64::from_be_bytes(chunk.try_into().ok()?));
-    }
-
-    let indices_start = counts.transitions as usize * 8;
-    let types: Vec<u8> = data
-        .get(indices_start..indices_start + counts.transitions as usize)?
-        .to_vec();
-
-    // 类型表：每项 6 字节（i32 偏移 + u8 夏令时标志 + u8 缩写下标）。
-    let table_start = indices_start + counts.transitions as usize;
-    let mut local = Vec::with_capacity(counts.types as usize);
-    for index in 0..counts.types as usize {
-        let start = table_start + index * 6;
-        let chunk = data.get(start..start + 4)?;
-        local.push(Local {
-            offset: i32::from_be_bytes(chunk.try_into().ok()?),
-        });
-    }
-
-    if local.is_empty() {
-        return None;
-    }
-
-    Some(Zone {
-        transitions,
-        types,
-        local,
-    })
-}
-
-/// TZif 头部里的各种计数，以及按它算出的数据块长度。
-#[derive(Debug, Clone, Copy)]
-struct Counts {
-    transitions: u32,
-    types: u32,
-    chars: u32,
-    leaps: u32,
-    standard: u32,
-    ut: u32,
-}
-
-impl Counts {
-    /// 读一个头部（偏移 44 处是时间数据，头部 44 字节）。
-    fn parse(bytes: &[u8], at: usize) -> Option<Self> {
-        let header = bytes.get(at..at + 44)?;
-        let number = |index: usize| -> Option<u32> {
-            let start = 20 + index * 4;
-            let chunk = header.get(start..start + 4)?;
-            Some(u32::from_be_bytes(chunk.try_into().ok()?))
-        };
-
-        Some(Self {
-            ut: number(0)?,
-            standard: number(1)?,
-            leaps: number(2)?,
-            transitions: number(3)?,
-            types: number(4)?,
-            chars: number(5)?,
-        })
-    }
-
-    /// 数据块的长度（不含 44 字节头部）。`wide` 为真时切换时间是 64 位。
-    fn size(&self, wide: bool) -> usize {
-        let time_size = if wide { 8 } else { 4 };
-
-        44 + self.transitions as usize * (time_size + 1)
-            + self.types as usize * 6
-            + self.chars as usize
-            + self.leaps as usize * if wide { 12 } else { 8 }
-            + self.standard as usize
-            + self.ut as usize
-    }
+    Ok(crate::collectors::tzif::offset_in(&bytes, now))
 }
 
 #[cfg(test)]
@@ -389,23 +247,32 @@ mod tests {
 
     #[test]
     fn parses_a_tzif_and_picks_the_offset() {
-        let zone = parse(&synthetic()).expect("该解析出来");
+        let bytes = synthetic();
 
-        assert_eq!(zone.transitions, [1000]);
         assert_eq!(
-            zone.offset_at(999),
+            crate::collectors::tzif::offset_in(&bytes, 999),
             Some(8 * 3600),
             "第一次切换之前用类型表首项"
         );
-        assert_eq!(zone.offset_at(1000), Some(9 * 3600));
-        assert_eq!(zone.offset_at(1_000_000), Some(9 * 3600));
+        assert_eq!(
+            crate::collectors::tzif::offset_in(&bytes, 1000),
+            Some(9 * 3600)
+        );
+        assert_eq!(
+            crate::collectors::tzif::offset_in(&bytes, 1_000_000),
+            Some(9 * 3600)
+        );
     }
 
     #[test]
     fn rejects_junk() {
-        assert_eq!(parse(b""), None);
-        assert_eq!(parse(b"NOTZIF"), None);
-        assert_eq!(parse(&[0; 44]), None, "magic 不对");
+        assert_eq!(crate::collectors::tzif::offset_in(b"", 0), None);
+        assert_eq!(crate::collectors::tzif::offset_in(b"NOTZIF", 0), None);
+        assert_eq!(
+            crate::collectors::tzif::offset_in(&[0; 44], 0),
+            None,
+            "magic 不对"
+        );
     }
 
     #[test]
