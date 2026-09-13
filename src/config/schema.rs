@@ -278,11 +278,30 @@ pub enum ModuleType {
     De,
     /// 窗口管理器 / 合成器。
     Wm,
+    /// 窗口装饰主题（标题栏那一套）。
+    ///
+    /// 单独写 `serde(rename)`：kebab-case 会按驼峰边界把它切成 `wm-theme`，
+    /// 而 fastfetch 里这个模块叫 `wmtheme`——一个词，中间没有连字符。
+    /// 配置里的名字与 `--structure` 的口径必须一致，所以这里显式钉死。
+    #[serde(rename = "wmtheme")]
+    WmTheme,
+    /// 界面主题名。
+    Theme,
+    /// 图标主题名。
+    Icons,
+    /// 界面字体。
+    Font,
+    /// 光标主题名。
+    Cursor,
+    /// 显卡型号与驱动。
+    Gpu,
+    /// 终端用的字体。
+    TerminalFont,
 }
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 41] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -317,6 +336,13 @@ impl ModuleType {
         Self::Display,
         Self::De,
         Self::Wm,
+        Self::WmTheme,
+        Self::Theme,
+        Self::Icons,
+        Self::Font,
+        Self::Cursor,
+        Self::Gpu,
+        Self::TerminalFont,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
@@ -326,7 +352,7 @@ impl ModuleType {
     /// `processes`、`loadavg`（各一行，一眼看到机器忙不忙）和 `rust`（本程序自己的版本）。
     ///
     /// 其余模块配一句 `type = "bios"` 就能加进来，`--list-modules` 会列全。
-    pub const DEFAULT: [Self; 26] = [
+    pub const DEFAULT: [Self; 33] = [
         Self::Title,
         Self::Separator,
         Self::Os,
@@ -341,8 +367,15 @@ impl ModuleType {
         Self::Display,
         Self::De,
         Self::Wm,
+        Self::WmTheme,
+        Self::Theme,
+        Self::Icons,
+        Self::Font,
+        Self::Cursor,
         Self::Terminal,
+        Self::TerminalFont,
         Self::Cpu,
+        Self::Gpu,
         Self::Memory,
         Self::Swap,
         Self::Disk,
@@ -397,6 +430,13 @@ impl ModuleType {
             Self::Display => "display",
             Self::De => "de",
             Self::Wm => "wm",
+            Self::WmTheme => "wmtheme",
+            Self::Theme => "theme",
+            Self::Icons => "icons",
+            Self::Font => "font",
+            Self::Cursor => "cursor",
+            Self::Gpu => "gpu",
+            Self::TerminalFont => "terminal-font",
         }
     }
 }

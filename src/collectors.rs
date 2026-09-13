@@ -9,6 +9,8 @@
 //! - [`read`] / [`env`]：读文件与环境变量，并把「没有」和「失败」分开
 //! - [`units`]：字节数与时长的格式化
 //! - [`proc_chain`]：顺着父进程链认祖先（Terminal、DE、WM 共用）
+//! - [`ini`]：带 section 的配置文件的解析与查找链
+//!   （WMTheme、Theme、Icons、Font、Cursor 共用）
 //! - [`os_release`] / [`accounts`] / [`dmi`] / [`meminfo`] / [`pkgdb`] / [`power_supply`] / [`tty`]：
 //!   被多个模块共用的系统数据源
 //!
@@ -23,6 +25,7 @@ pub mod board;
 pub mod brightness;
 pub mod chassis;
 pub mod cpu;
+pub mod cursor;
 pub mod de;
 pub mod disk;
 pub mod display;
@@ -30,7 +33,11 @@ pub mod dmi;
 pub mod dns;
 pub mod editor;
 pub mod env;
+pub mod font;
+pub mod gpu;
 pub mod host;
+pub mod icons;
+pub mod ini;
 pub mod init_system;
 pub mod kernel;
 pub mod line_break;
@@ -53,7 +60,9 @@ pub mod session;
 pub mod shell;
 pub mod swap;
 pub mod terminal;
+pub mod terminal_font;
 pub mod terminal_size;
+pub mod theme;
 pub mod title;
 pub mod tpm;
 pub mod tty;
@@ -62,6 +71,7 @@ pub mod uptime;
 pub mod user;
 pub mod version;
 pub mod wm;
+pub mod wmtheme;
 
 use crate::core::collector::Collector;
 
@@ -108,4 +118,11 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &display::Display,
     &de::Desktop,
     &wm::WindowManager,
+    &wmtheme::WmTheme,
+    &theme::Theme,
+    &icons::Icons,
+    &font::Font,
+    &cursor::Cursor,
+    &gpu::Gpu,
+    &terminal_font::TerminalFont,
 ];

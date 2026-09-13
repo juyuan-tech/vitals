@@ -113,13 +113,22 @@ fn module_selection_drops_the_configured_conditions() {
 
 #[test]
 fn unknown_module_name_is_a_usage_error_listing_the_valid_ones() {
-    let text = parse_error(&["--module", "gpu"]);
+    // 这里**故意用一个永远不会成为模块的名字**：以前写的是 `gpu`，
+    // 等 `gpu` 真做出来那天，这条测试就从「不认识的名字该报错」变成了
+    // 「认识的名字不该报错」，红得很莫名。
+    let text = parse_error(&["--module", "nonsense"]);
 
-    assert!(text.contains("gpu"), "错误该指出写错的名字：\n{text}");
+    assert!(text.contains("nonsense"), "错误该指出写错的名字：\n{text}");
     // 合法名单从 ModuleType::ALL 现取，所以这里也顺带守着「名单没被抄错」。
     assert!(
         text.contains("os") && text.contains("memory"),
         "错误该列出可用模块：\n{text}"
+    );
+    // 已经做出来的模块必须出现在「可用」名单里：那份名单是从 `ModuleType::ALL`
+    // 现取的，这条守着它没被抄成一份写死的旧表。
+    assert!(
+        text.contains("gpu") && text.contains("terminal-font"),
+        "新做的模块该出现在可用名单里：\n{text}"
     );
 }
 

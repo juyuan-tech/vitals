@@ -75,10 +75,31 @@ type = "de"
 type = "wm"
 
 [[modules]]
+type = "wmtheme"
+
+[[modules]]
+type = "theme"
+
+[[modules]]
+type = "icons"
+
+[[modules]]
+type = "font"
+
+[[modules]]
+type = "cursor"
+
+[[modules]]
 type = "terminal"
 
 [[modules]]
+type = "terminal-font"
+
+[[modules]]
 type = "cpu"
+
+[[modules]]
+type = "gpu"
 
 [[modules]]
 type = "memory"
