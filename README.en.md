@@ -222,6 +222,7 @@ The primary documentation is Chinese; the per-topic references live under `docs/
 | [`docs/logo.md`](docs/logo.md) | logos and colours |
 | [`doc/vitals.1`](doc/vitals.1) | man page (`man ./doc/vitals.1`) |
 | [`presets/`](presets) | example configs: minimal / desktop / headless / all |
+| [`completions/`](completions) | bash and zsh completions (no fish: untested here, and untested things are not shipped) |
 | [`AUDIT.md`](AUDIT.md) | security and quality audit (Chinese) |
 | [`CHANGELOG.md`](CHANGELOG.md) | release history |
 

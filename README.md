@@ -31,6 +31,13 @@ $ git clone https://github.com/juyuan-tech/vitals
 $ cargo install --path vitals
 ```
 
+补全（可选，脚本不依赖任何东西）：
+
+```console
+$ install -Dm644 completions/vitals.bash ~/.local/share/bash-completion/completions/vitals   # bash
+$ install -Dm644 completions/_vitals ~/.zsh/completions/_vitals                                 # zsh
+```
+
 前置条件：**Linux**（数据来自 `/proc` 与 `/sys`；代码里没有任何平台分支，其它系统未验证），
 Rust 1.85 或更新。
 
@@ -239,6 +246,7 @@ $ cargo fmt --all -- --check
 | [`docs/logo.md`](docs/logo.md) | Logo 与配色 |
 | [`doc/vitals.1`](doc/vitals.1) | man page（`man ./doc/vitals.1`，也可以用 `groff -man` 渲染） |
 | [`presets/`](presets) | 示例配置：`minimal` / `desktop` / `headless` / `all` |
+| [`completions/`](completions) | bash 与 zsh 补全（fish 没做：本机没有 fish，没验证过的不交付） |
 | [`AUDIT.md`](AUDIT.md) | 安全与质量审计报告 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本变更 |
 

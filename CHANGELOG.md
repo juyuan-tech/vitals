@@ -2,6 +2,9 @@
 
 ## 未发布
 
+- 新增 `completions/`：bash 与 zsh 补全。两份都真跑过（bash 直接调补全函数、zsh 用 fpath + compinit 装载）；模块名现问 `--list-modules`，选项名与 Logo 名由 `tests/docs.rs` 双向盯着。fish 未提供——本机没有 fish，没验证过的不交付。
+- 修掉 `disk_io` 里两个依赖宿主机型的测试（断言了本机 NVMe 的型号、赌虚拟盘叫 zram0），CI 上红过一次（那台机器报 `MSFT NVMe Accelerator v1.0`），上一轮只是碰巧通过。现在自己搭 `/sys/block/<dev>/device/` 的输入，四种情况都钉住。
+
 - 新增 `doc/vitals.1` man page（用 `groff -man` 渲染核对过）与 `presets/` 四份示例配置
   （minimal / desktop / headless / all，每份都实跑过）。
 - 新增 `tests/docs.rs`：盯住三条最容易腐烂的连接点——示例配置要能跑、`presets/all.toml`

@@ -121,3 +121,65 @@ fn the_module_reference_documents_every_module() {
         "docs/modules.md 与 --list-modules 对不上（加了模块就要补一条）"
     );
 }
+
+/// `--help` 里出现的所有长选项（自己扫，不引正则库）。
+fn flags_in_help() -> Vec<String> {
+    let out = Command::new(env!("CARGO_BIN_EXE_vitals"))
+        .arg("--help")
+        .output()
+        .expect("该能跑 --help");
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let bytes = text.as_bytes();
+    let mut flags = Vec::new();
+    let mut i = 0;
+    while i + 3 < bytes.len() {
+        if &bytes[i..i + 2] == b"--" {
+            let start = i;
+            let mut j = i + 2;
+            while j < bytes.len() && ((bytes[j] as char).is_ascii_lowercase() || bytes[j] == b'-') {
+                j += 1;
+            }
+            if j > start + 2 {
+                flags.push(text[start..j].to_owned());
+                i = j;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    flags.sort();
+    flags.dedup();
+    flags
+}
+
+#[test]
+fn the_completions_know_every_option_and_logo() {
+    let bash =
+        std::fs::read_to_string(root().join("completions/vitals.bash")).expect("该有 bash 补全");
+    let zsh = std::fs::read_to_string(root().join("completions/_vitals")).expect("该有 zsh 补全");
+
+    let flags = flags_in_help();
+    assert!(
+        flags.len() >= 10,
+        "该能从 --help 里扫出选项，实际：{flags:?}"
+    );
+    for flag in &flags {
+        assert!(bash.contains(flag.as_str()), "bash 补全里缺 {flag}");
+        assert!(zsh.contains(flag.as_str()), "zsh 补全里缺 {flag}");
+    }
+
+    // 内置 Logo 的名字也要在补全里（加了一张图就得补上）。
+    let logos: Vec<String> = std::fs::read_dir(root().join("src/render/logos"))
+        .expect("该有 logos 目录")
+        .map(|entry| entry.expect("目录项").path())
+        .filter_map(|path| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+        })
+        .collect();
+    assert!(!logos.is_empty());
+    for logo in logos {
+        assert!(bash.contains(&logo), "bash 补全里缺 logo {logo}");
+        assert!(zsh.contains(&logo), "zsh 补全里缺 logo {logo}");
+    }
+}

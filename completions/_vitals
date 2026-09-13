@@ -1,0 +1,33 @@
+#compdef vitals
+#
+# vitals 的 zsh 补全。
+#
+# 安装（任选一种）：
+#   install -Dm644 completions/_vitals ~/.zsh/completions/_vitals
+#   然后在 ~/.zshrc 里加：
+#     fpath=(~/.zsh/completions $fpath)
+#     autoload -U compinit && compinit
+#
+# 模块名现问 `vitals --list-modules`，不在这里硬编码；
+# 选项名由 tests/docs.rs 盯着（与 `vitals --help` 对不上就会红）。
+
+_vitals() {
+    local -a modules
+
+    _arguments -s -S \
+        "--config=[指定配置文件]:配置文件:_files" \
+        "--json[以 JSON 输出（自动关掉颜色与 Logo）]" \
+        "--logo=[Logo：auto 按发行版自动选、none 不显示、或直接给名称]:Logo:(auto none alpine arch centos debian fedora gentoo linux manjaro nixos opensuse ubuntu void)" \
+        "--module=[只显示这些模块，逗号分隔]:模块:($(command vitals --list-modules 2>/dev/null))" \
+        "--no-color[关闭颜色（等同设置 NO_COLOR）]" \
+        "--list-modules[列出全部可用模块]" \
+        "--gen-config[把内置默认配置打印到 stdout]" \
+        "--verbose[把诊断信息写到 stderr]" \
+        "--explain[逐个说明每个模块的状态：显示 / 空 / 跳过 / 失败]" \
+        "--sources[说明每个模块实际读了哪些文件]" \
+        "(-h --help)"{-h,--help}"[打印帮助]" \
+        "(-V --version)"{-V,--version}"[打印版本]" \
+        "*: :_guard '^-*' 'vitals 没有位置参数'"
+}
+
+_vitals "$@"
