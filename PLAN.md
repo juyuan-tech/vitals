@@ -840,3 +840,39 @@ $ vitals --json | 类型序列
 
 已知的**唯一**结构差异仍是 `Disk`：它对每个挂载点各印一行（本机多出外接的
 `/run/media/gxyarch/Kingston`），我们只印根分区那一行；这条记在 §5.9。
+
+## §5.15 `Custom` 的设计与代价（本会话评估完，未动手）
+
+`Custom` 与别的模块不同：它的内容不是采来的，是**配置里写的**。所以先要看清数据怎么流：
+
+```
+Config.modules: Vec<ModuleEntry>      ← 每项带 type / platforms / requires（配置里的文本也在这一层）
+        ↓  conditions::plan(&modules) → Plan        ← **只留模块名**，其余字段到这里就丢了
+Dispatcher::run(&plan_names, ctx)     ← 按名字查 COLLECTORS，再调 collect()
+        ↓
+RunOutcome { entries, failures }
+```
+
+`Context`（`core/collector.rs:43`）是**整轮共用**的一份（`platform` + `timeout`），装不下
+「这一项自己的文本」——所以给 `Context` 加字段这条路是错的，它会让所有模块都看见一份
+其实只属于某一项的字符串。
+
+**可行的最小设计**：让 `Plan` 顺便带上 `custom` 的文本，由**调度器把它物化成一条 `Info`**，
+不经过采集器。理由是它和 `separator`/`title` 同类——内容由配置/渲染器决定，不存在「采集」。
+代价（都要改，且都要有测试）：
+
+1. `ModuleEntry` 加一个可选的 `format` 字段（`deny_unknown_fields` 决定了必须显式声明），
+   并只对 `type = "custom"` 生效（别的模块写了要报错，不能悄悄忽略）。
+2. `conditions::plan` 的返回值 `Plan` 带上这份文本（现在只有名字）。
+3. `Dispatcher::run` 里为 `custom` 加一支：直接产出 `Info`，不走 `COLLECTORS`；同时
+   `ModuleType::ALL` / `COLLECTORS` 的「一一对应」不变（`custom` 仍然要在 `ALL` 里，
+   这样 `--list-modules` 与校验都认它，只是没有采集器而已——这一层需要先想清楚，
+   否则 `tests/collectors.rs` 里那条「每个模块都能找到自己的采集器」的守卫会拦下来）。
+4. 验收：配置里写 `format = "hello"` → `vitals --module custom` 印 `hello`；
+   写错字段名报错；`--json` 里的形状与其它模块一致。
+
+**第 3 条是关键**：本仓库有一条守卫（每个注册模块必须有采集器），`custom` 会打破它。
+要么给这条守卫开一个明确的例外（像 `separator`/`break`/`colors` 那样写进 `LAYOUT`），
+要么把 `custom` 做成一个「从 `Context` 之外取数」的特例——两者都要动到测试基线的语义，
+所以这不是「加个文件」的活，而是一次**架构决定**。本会话预算不足以做完并验证它，
+如实记在这里，不半做。
