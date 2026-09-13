@@ -1,0 +1,102 @@
+# 桌面：默认视图 + 固件/外设细节（默认视图故意不含 bios/board/chassis，想显示就在这里列）
+#
+# 由 `vitals --config presets/desktop.toml` 使用；这份文件整体替换内置默认。
+# 模块清单见 `vitals --list-modules`，逐条说明见 docs/modules.md。
+
+config_version = 1
+
+[[modules]]
+type = "title"
+
+[[modules]]
+type = "os"
+
+[[modules]]
+type = "host"
+
+[[modules]]
+type = "kernel"
+
+[[modules]]
+type = "uptime"
+
+[[modules]]
+type = "packages"
+
+[[modules]]
+type = "shell"
+
+[[modules]]
+type = "display"
+
+[[modules]]
+type = "monitor"
+
+[[modules]]
+type = "de"
+
+[[modules]]
+type = "wm"
+
+[[modules]]
+type = "theme"
+
+[[modules]]
+type = "icons"
+
+[[modules]]
+type = "font"
+
+[[modules]]
+type = "cursor"
+
+[[modules]]
+type = "terminal"
+
+[[modules]]
+type = "terminal-font"
+
+[[modules]]
+type = "cpu"
+
+[[modules]]
+type = "gpu"
+
+[[modules]]
+type = "memory"
+
+[[modules]]
+type = "swap"
+
+[[modules]]
+type = "disk"
+
+[[modules]]
+type = "battery"
+
+[[modules]]
+type = "sound"
+
+[[modules]]
+type = "wifi"
+
+[[modules]]
+type = "tpm"
+
+[[modules]]
+type = "bios"
+
+[[modules]]
+type = "board"
+
+[[modules]]
+type = "chassis"
+
+[[modules]]
+type = "datetime"
+
+[[modules]]
+type = "locale"
+
+[[modules]]
+type = "local-ip"

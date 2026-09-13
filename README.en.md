@@ -52,30 +52,37 @@ $ vitals --explain            # why each module appeared — or did not
 $ vitals --sources            # the files each module actually read
 ```
 
-The default view looks like this (**Example**: this is a real default view from a Linux laptop, with the user name, machine model, panel id, network interface and battery id replaced by placeholders; everything else is verbatim.):
+The default view looks like this (**Example**: a real default view from a Linux laptop, including the release logo auto-selected by `--logo auto`. Only the user name, machine model, panel id, network interface and battery id are placeholders; everything else is verbatim. `--logo none` drops the art on the left.):
 
 ```console
-user@host
-──────────────
-OS: Arch Linux x86_64
-Host: Example Laptop 14
-Kernel: Linux 7.2.4-arch1-2
-Uptime: 1 day, 7 hours, 16 mins
-Packages: 3 (appimage), 3 (flatpak), 1042 (pacman)
-Shell: zsh 5.9.2
-Display (eDP-1): 2880x1800 in 14", 120 Hz [Built-in]
-Window Manager: Niri 26.04 (Wayland)
-Cursor: breeze (30px)
-Terminal: kitty 0.48.2
-Terminal Font: JetBrainsMono Nerd Font 12pt
-CPU: AMD Ryzen 7 8845H w/ Radeon(TM) 780M Graphics (8C/16T)
-GPU: AMD Radeon 780M [HawkPoint1] (amdgpu)
-Memory: 22.13 GiB / 30.65 GiB (72%)
-Swap: 7.88 GiB / 47.33 GiB (17%)
-Disk: 53.37 GiB / 920.87 GiB (6%)
-Local IP (wlan0): 192.168.1.101/24
-Battery (BAT0): 100% [AC Connected]
-Locale: zh_CN.UTF-8
+                                       user@host
+                                       ──────────────
+                  -`                   OS: Arch Linux x86_64
+                 .o+`                  Host: Example Laptop 14
+                `ooo/                  Kernel: Linux 7.2.4-arch1-2
+               `+oooo:                 Uptime: 1 day, 7 hours, 27 mins
+              `+oooooo:                Packages: 3 (appimage), 3 (flatpak), 1042 (pacman)
+              -+oooooo+:               Shell: zsh 5.9.2
+            `/:-:++oooo+:              Display (eDP-1): 2880x1800 in 14", 120 Hz [Built-in]
+           `/++++/+++++++:             Window Manager: Niri 26.04 (Wayland)
+          `/++++++++++++++:            Cursor: breeze (30px)
+         `/+++ooooooooooooo/`          Terminal: kitty 0.48.2
+        ./ooosssso++osssssso+`         Terminal Font: JetBrainsMono Nerd Font 12pt
+       .oossssso-````/ossssss+`        CPU: AMD Ryzen 7 8845H w/ Radeon(TM) 780M Graphics (8C/16T)
+      -osssssso.      :ssssssso.       GPU: AMD Radeon 780M [HawkPoint1] (amdgpu)
+     :osssssss/        osssso+++.      Memory: 22.55 GiB / 30.65 GiB (74%)
+    /ossssssss/        +ssssooo/-      Swap: 7.88 GiB / 47.33 GiB (17%)
+  `/ossssso+/:-        -:/+osssso+-    Disk: 53.63 GiB / 920.87 GiB (6%)
+ `+sso+:-`                 `.-/+oso:   Local IP (wlan0): 192.168.1.10/24
+`++:.                           `-/+/  Battery (BAT0): 100% [AC Connected]
+.`                                 `/  Locale: zh_CN.UTF-8
+```
+
+The repository also ships a man page (`doc/vitals.1`) and four example configs (`presets/`):
+
+```console
+$ vitals --config presets/headless.toml   # headless: no sampling, no desktop/hardware modules
+$ vitals --config presets/all.toml        # every one of the 61 modules
 ```
 
 ## Every number can be traced
@@ -199,6 +206,24 @@ so the total is about one window.
 
 The full audit (8 findings, each with evidence and a fix) is [`AUDIT.md`](AUDIT.md) (Chinese).
 How to report a security issue: [`SECURITY.md`](SECURITY.md).
+
+## Documentation
+
+The primary documentation is Chinese; the per-topic references live under `docs/`:
+
+| File | Contents |
+| --- | --- |
+| [`docs/modules.md`](docs/modules.md) | all 61 modules: what each shows and which files it reads |
+| [`docs/configuration.md`](docs/configuration.md) | per-key config reference, conditions, examples |
+| [`docs/cli.md`](docs/cli.md) | every option, exit codes, environment variables |
+| [`docs/json.md`](docs/json.md) | the `--json` shape and how to consume it |
+| [`docs/vitals.schema.json`](docs/vitals.schema.json) | JSON Schema (draft 2020-12) |
+| [`docs/faq.md`](docs/faq.md) | FAQ, every answer measured |
+| [`docs/logo.md`](docs/logo.md) | logos and colours |
+| [`doc/vitals.1`](doc/vitals.1) | man page (`man ./doc/vitals.1`) |
+| [`presets/`](presets) | example configs: minimal / desktop / headless / all |
+| [`AUDIT.md`](AUDIT.md) | security and quality audit (Chinese) |
+| [`CHANGELOG.md`](CHANGELOG.md) | release history |
 
 ## Known gaps
 

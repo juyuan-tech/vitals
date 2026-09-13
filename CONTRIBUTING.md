@@ -45,6 +45,10 @@ $ cargo fmt --all -- --check
 4. 如果它要出现在默认视图里、或需要默认条件，同步 `src/config/default.toml`——
    注意 `--gen-config` 打印的就是这个文件本身（`include_str!`），改它就等于改模板。
 5. 同步文档：`docs/modules.md` 对应条目、以及 `--sources` 能观测到的新路径。
+6. 把新模块加进 `presets/all.toml`（它必须等于 `--list-modules` 的全部模块）。
+
+   `tests/docs.rs` 会替你检查第 5、6 步：示例配置能不能跑、`all.toml` 是否等于注册表、
+   `docs/modules.md` 是否覆盖了每个模块。忘了改就会红。
 
 ## 测试与文档的要求
 

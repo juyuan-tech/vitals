@@ -1,5 +1,13 @@
 # 变更记录
 
+## 未发布
+
+- 新增 `doc/vitals.1` man page（用 `groff -man` 渲染核对过）与 `presets/` 四份示例配置
+  （minimal / desktop / headless / all，每份都实跑过）。
+- 新增 `tests/docs.rs`：盯住三条最容易腐烂的连接点——示例配置要能跑、`presets/all.toml`
+  要等于注册表里的全部模块、`docs/modules.md` 要覆盖每个模块。加了模块忘改文档就会红。
+- README 的文档索引补上 man page 与示例配置；配置参考里写明 presets 的用法。
+
 ## 0.1.1
 
 两处**行为修正**：

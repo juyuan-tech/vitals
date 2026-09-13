@@ -11,6 +11,9 @@
 
 ---
 
+仓库里还带四份示例配置，可以直接拿来跑（`presets/`）：`minimal`、`desktop`、`headless`、`all`——
+`tests/docs.rs` 会保证它们真的跑得通。
+
 ## 1. 配置文件在哪
 
 ### 1.1 指定路径：`--config`

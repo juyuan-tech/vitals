@@ -1,0 +1,215 @@
+.TH VITALS 1 "2026-09-13" "vitals 0.1.1" "用户命令"
+.SH NAME
+vitals \- 一眼看完这台机器的状态
+.SH SYNOPSIS
+.B vitals
+.RI [ 选项 ]
+.SH DESCRIPTION
+.B vitals
+是一个系统信息工具（fastfetch / neofetch 这一类），共 61 个模块。
+.PP
+它不靠外部命令取数：自己读
+.IR /proc 、
+.IR /sys 、
+.IR /etc
+与系统调用，零子进程、零
+.BR unsafe 、
+不写文件、不发网络包。输出里的每一条都能追问来源——
+.B \-\-sources
+会打印每个模块
+.B 实际
+读了哪些文件（运行时记录，不是手写的来源表）。
+.PP
+不带选项时按配置文件渲染；配置文件整体替换内置默认视图。
+.SH OPTIONS
+.TP
+.B \-\-config " " \fI路径\fR
+指定配置文件。不指定时依次找
+.IR $XDG_CONFIG_HOME/vitals/config.toml 、
+.IR $HOME/.config/vitals/config.toml ；
+都没有就用内置默认。指定的文件不存在是错误（退出码 1），默认路径不存在则静默使用内置默认。
+.TP
+.B \-\-json
+以 JSON 输出，自动关掉颜色与 Logo。形状见
+.IR docs/json.md ，
+schema 见
+.IR docs/vitals.schema.json 。
+.TP
+.BI \-\-logo " auto|none|名称"
+Logo：
+.B auto
+按发行版自动选（默认）、
+.B none
+不显示、或直接给名称。名称大小写不敏感，不存在的名字回退到通用图，不报错。
+.TP
+.BI \-\-module " 列表"
+只显示这些模块，逗号分隔。顺序就是你写的顺序；配置里没有的模块也能点名。
+.TP
+.B \-\-no\-color
+关闭颜色，等同设置
+.BR NO_COLOR 。
+.TP
+.B \-\-list\-modules
+列出全部可用模块名（61 个）。
+.TP
+.B \-\-gen\-config
+把内置默认配置打印到 stdout（带注释），可重定向成配置文件。
+.TP
+.B \-\-verbose
+把诊断信息（含最终生效的设置）写到 stderr。
+.TP
+.B \-\-explain
+逐个模块说明状态：显示 / 空 / 跳过 / 失败，四种各有理由。它对着
+.B 结果
+说话，因此会真跑一遍采集。
+.TP
+.B \-\-sources
+打印每个模块
+.B 实际
+读了哪些文件。两个都给时先打状态、再打依据。
+.TP
+.BR \-h ", " \-\-help
+打印帮助。
+.TP
+.BR \-V ", " \-\-version
+打印版本。
+.SH MODULES
+61 个模块，可用
+.B vitals \-\-list\-modules
+列出，逐条说明（含每个模块读取的文件）见仓库里的
+.IR docs/modules.md 。
+.PP
+分组概览：系统 13（os、host、kernel、bios、board、chassis、uptime、datetime、version、
+init\-system、bootmgr、processes、loadavg）；硬件 21；会话与桌面 16；网络与吞吐 6；
+软件 2（packages、rust）；版式 3（title、separator、break）。
+.PP
+其中 net\-io、disk\-io、cpu\-usage、top 是差分模块，各自要等一个 200 ms 的采样窗口；
+它们并行采集，总时长约等于一个窗口。
+.SH CONFIGURATION
+配置文件是 TOML，只支持这一种格式。它
+.B 整体替换
+内置默认视图：写了
+.BR modules ，
+内置列表就不再生效。
+.PP
+每个模块可以挂条件，条件不满足就跳过它（跳过不是错误，退出码仍为 0）：
+.B when\-file\-exists
+（路径存在）、
+.B when\-command\-exists
+（沿
+.B PATH
+找同名文件，
+.B 不执行
+命令）、
+.B platforms
+（平台）。多个条件是「与」。
+.PP
+示例配置见仓库的
+.IR presets/ 。
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+设置后关闭颜色（同
+.BR \-\-no\-color ）。
+.TP
+.B CLICOLOR_FORCE
+强制输出颜色，即使 stdout 不是终端。
+.TP
+.B COLUMNS
+终端宽度；设置后会影响要不要画 Logo。
+.TP
+.BR XDG_CONFIG_HOME ", " HOME
+决定配置文件的查找路径。
+.TP
+.B PATH
+只被
+.B when\-command\-exists
+用来查找（不执行）。
+.TP
+.BR LC_ALL ", " LC_CTYPE ", " LANG
+locale 模块与若干格式化。
+.TP
+.BR TZ ", " TZDIR
+时区；时区名会做路径校验，相对名字里的
+.B ..
+成分一律不接受。
+.PP
+另有若干模块读它们各自的环境变量（
+.BR SHELL 、 USER 、 LOGNAME 、 VISUAL 、 EDITOR 、 XCURSOR_* 、 TERM* 、 XDG_* ）；
+完整清单一列在
+.IR docs/cli.md 。
+.SH "EXIT STATUS"
+.TP
+.B 0
+正常，包括
+.BR \-\-explain 、 \-\-sources 、 \-\-list\-modules 、 \-\-gen\-config
+以及「某个模块采集失败但整体渲染成功」。模块失败只在 stderr 给一行警告，不会让
+其它模块的结果作废。
+.TP
+.B 1
+配置读取、解析或版本错误；或写出失败。
+.TP
+.B 2
+参数错误（未知选项、未知模块、多给位置参数）。
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/vitals/config.toml
+用户配置。
+.TP
+.I /etc/os-release
+发行版信息（
+.BR \-\-sources
+可以逐模块查完整清单）。
+.SH EXAMPLES
+.PP
+默认视图：
+.PP
+.RS 4
+.EX
+vitals
+.EE
+.RE
+.PP
+只要几项：
+.PP
+.RS 4
+.EX
+vitals \-\-module os,cpu,memory
+.EE
+.RE
+.PP
+给脚本读：
+.PP
+.RS 4
+.EX
+vitals \-\-json | jq \-r '.entries[] | "\\(.key): \\(.value)"'
+.EE
+.RE
+.PP
+查来源与状态：
+.PP
+.RS 4
+.EX
+vitals \-\-sources \-\-module os,host
+vitals \-\-explain \-\-module os,gamepad
+.EE
+.RE
+.PP
+用示例配置：
+.PP
+.RS 4
+.EX
+vitals \-\-config presets/headless.toml
+.EE
+.RE
+.SH "SEE ALSO"
+仓库文档目录
+.IR docs/ ：
+.BR modules.md 、
+.BR configuration.md 、
+.BR cli.md 、
+.BR json.md 、
+.BR faq.md 、
+.BR logo.md ；
+安全审计见
+.IR AUDIT.md 。

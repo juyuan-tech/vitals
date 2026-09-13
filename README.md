@@ -47,30 +47,37 @@ $ vitals --explain            # 每个模块为什么出现、或为什么没出
 $ vitals --sources            # 每个模块**实际读了哪些文件**
 ```
 
-默认视图长这样（**示例**：这就是本机真实的默认视图，只把用户名、机型、面板型号、网卡名、电池名换成了占位值，其余原样。`--logo none` 不会去掉这一段——它只去掉左边的艺术字。）：
+仓库里还带一份 man page（`doc/vitals.1`）和四份示例配置（`presets/`）：
 
 ```console
-user@host
-──────────────
-OS: Arch Linux x86_64
-Host: Example Laptop 14
-Kernel: Linux 7.2.4-arch1-2
-Uptime: 1 day, 7 hours, 16 mins
-Packages: 3 (appimage), 3 (flatpak), 1042 (pacman)
-Shell: zsh 5.9.2
-Display (eDP-1): 2880x1800 in 14", 120 Hz [Built-in]
-Window Manager: Niri 26.04 (Wayland)
-Cursor: breeze (30px)
-Terminal: kitty 0.48.2
-Terminal Font: JetBrainsMono Nerd Font 12pt
-CPU: AMD Ryzen 7 8845H w/ Radeon(TM) 780M Graphics (8C/16T)
-GPU: AMD Radeon 780M [HawkPoint1] (amdgpu)
-Memory: 22.13 GiB / 30.65 GiB (72%)
-Swap: 7.88 GiB / 47.33 GiB (17%)
-Disk: 53.37 GiB / 920.87 GiB (6%)
-Local IP (wlan0): 192.168.1.101/24
-Battery (BAT0): 100% [AC Connected]
-Locale: zh_CN.UTF-8
+$ vitals --config presets/headless.toml   # 无头机：不含采样模块与图形相关模块
+$ vitals --config presets/all.toml        # 全部 61 个模块
+```
+
+默认视图长这样（**示例**：这就是本机真实的默认视图（含按发行版自动选的 Logo），只把用户名、机型、面板型号、网卡名、电池名换成了占位值，其余原样。加 `--logo none` 就没有左边的艺术字。）：
+
+```console
+                                       user@host
+                                       ──────────────
+                  -`                   OS: Arch Linux x86_64
+                 .o+`                  Host: Example Laptop 14
+                `ooo/                  Kernel: Linux 7.2.4-arch1-2
+               `+oooo:                 Uptime: 1 day, 7 hours, 27 mins
+              `+oooooo:                Packages: 3 (appimage), 3 (flatpak), 1042 (pacman)
+              -+oooooo+:               Shell: zsh 5.9.2
+            `/:-:++oooo+:              Display (eDP-1): 2880x1800 in 14", 120 Hz [Built-in]
+           `/++++/+++++++:             Window Manager: Niri 26.04 (Wayland)
+          `/++++++++++++++:            Cursor: breeze (30px)
+         `/+++ooooooooooooo/`          Terminal: kitty 0.48.2
+        ./ooosssso++osssssso+`         Terminal Font: JetBrainsMono Nerd Font 12pt
+       .oossssso-````/ossssss+`        CPU: AMD Ryzen 7 8845H w/ Radeon(TM) 780M Graphics (8C/16T)
+      -osssssso.      :ssssssso.       GPU: AMD Radeon 780M [HawkPoint1] (amdgpu)
+     :osssssss/        osssso+++.      Memory: 22.55 GiB / 30.65 GiB (74%)
+    /ossssssss/        +ssssooo/-      Swap: 7.88 GiB / 47.33 GiB (17%)
+  `/ossssso+/:-        -:/+osssso+-    Disk: 53.63 GiB / 920.87 GiB (6%)
+ `+sso+:-`                 `.-/+oso:   Local IP (wlan0): 192.168.1.10/24
+`++:.                           `-/+/  Battery (BAT0): 100% [AC Connected]
+.`                                 `/  Locale: zh_CN.UTF-8
 ```
 
 ## 每个数字都能追问来源
@@ -230,6 +237,8 @@ $ cargo fmt --all -- --check
 | [`docs/vitals.schema.json`](docs/vitals.schema.json) | JSON Schema（draft 2020-12） |
 | [`docs/faq.md`](docs/faq.md) | 常见问题（都是实测回答） |
 | [`docs/logo.md`](docs/logo.md) | Logo 与配色 |
+| [`doc/vitals.1`](doc/vitals.1) | man page（`man ./doc/vitals.1`，也可以用 `groff -man` 渲染） |
+| [`presets/`](presets) | 示例配置：`minimal` / `desktop` / `headless` / `all` |
 | [`AUDIT.md`](AUDIT.md) | 安全与质量审计报告 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本变更 |
 

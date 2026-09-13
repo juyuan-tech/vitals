@@ -1,0 +1,189 @@
+# 全部 61 个模块。含 net-io/disk-io/cpu-usage/top 四个采样模块，会各等一个 200 ms 窗口（并行后总时长≈一次窗口）
+#
+# 由 `vitals --config presets/all.toml` 使用；这份文件整体替换内置默认。
+# 模块清单见 `vitals --list-modules`，逐条说明见 docs/modules.md。
+
+config_version = 1
+
+[[modules]]
+type = "title"
+
+[[modules]]
+type = "separator"
+
+[[modules]]
+type = "break"
+
+[[modules]]
+type = "os"
+
+[[modules]]
+type = "host"
+
+[[modules]]
+type = "kernel"
+
+[[modules]]
+type = "bios"
+
+[[modules]]
+type = "board"
+
+[[modules]]
+type = "chassis"
+
+[[modules]]
+type = "uptime"
+
+[[modules]]
+type = "loadavg"
+
+[[modules]]
+type = "processes"
+
+[[modules]]
+type = "cpu"
+
+[[modules]]
+type = "memory"
+
+[[modules]]
+type = "swap"
+
+[[modules]]
+type = "disk"
+
+[[modules]]
+type = "user"
+
+[[modules]]
+type = "shell"
+
+[[modules]]
+type = "terminal"
+
+[[modules]]
+type = "terminal-size"
+
+[[modules]]
+type = "locale"
+
+[[modules]]
+type = "editor"
+
+[[modules]]
+type = "version"
+
+[[modules]]
+type = "init-system"
+
+[[modules]]
+type = "rust"
+
+[[modules]]
+type = "battery"
+
+[[modules]]
+type = "power-adapter"
+
+[[modules]]
+type = "brightness"
+
+[[modules]]
+type = "dns"
+
+[[modules]]
+type = "tpm"
+
+[[modules]]
+type = "packages"
+
+[[modules]]
+type = "display"
+
+[[modules]]
+type = "de"
+
+[[modules]]
+type = "wm"
+
+[[modules]]
+type = "wmtheme"
+
+[[modules]]
+type = "theme"
+
+[[modules]]
+type = "icons"
+
+[[modules]]
+type = "font"
+
+[[modules]]
+type = "cursor"
+
+[[modules]]
+type = "gpu"
+
+[[modules]]
+type = "terminal-font"
+
+[[modules]]
+type = "local-ip"
+
+[[modules]]
+type = "users"
+
+[[modules]]
+type = "physical-disk"
+
+[[modules]]
+type = "bootmgr"
+
+[[modules]]
+type = "sound"
+
+[[modules]]
+type = "cpu-cache"
+
+[[modules]]
+type = "lm"
+
+[[modules]]
+type = "btrfs"
+
+[[modules]]
+type = "datetime"
+
+[[modules]]
+type = "wifi"
+
+[[modules]]
+type = "camera"
+
+[[modules]]
+type = "keyboard"
+
+[[modules]]
+type = "mouse"
+
+[[modules]]
+type = "gamepad"
+
+[[modules]]
+type = "net-io"
+
+[[modules]]
+type = "disk-io"
+
+[[modules]]
+type = "cpu-usage"
+
+[[modules]]
+type = "top"
+
+[[modules]]
+type = "colors"
+
+[[modules]]
+type = "monitor"

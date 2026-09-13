@@ -1,0 +1,45 @@
+# 无头机 / CI：不含采样模块，也不含依赖图形会话与外设的模块
+#
+# 由 `vitals --config presets/headless.toml` 使用；这份文件整体替换内置默认。
+# 模块清单见 `vitals --list-modules`，逐条说明见 docs/modules.md。
+
+config_version = 1
+
+[[modules]]
+type = "title"
+
+[[modules]]
+type = "os"
+
+[[modules]]
+type = "kernel"
+
+[[modules]]
+type = "host"
+
+[[modules]]
+type = "uptime"
+
+[[modules]]
+type = "loadavg"
+
+[[modules]]
+type = "processes"
+
+[[modules]]
+type = "cpu"
+
+[[modules]]
+type = "memory"
+
+[[modules]]
+type = "swap"
+
+[[modules]]
+type = "disk"
+
+[[modules]]
+type = "packages"
+
+[[modules]]
+type = "rust"

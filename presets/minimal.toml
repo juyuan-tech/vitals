@@ -1,0 +1,24 @@
+# 最小视图：只留一眼要看的那几项
+#
+# 由 `vitals --config presets/minimal.toml` 使用；这份文件整体替换内置默认。
+# 模块清单见 `vitals --list-modules`，逐条说明见 docs/modules.md。
+
+config_version = 1
+
+[[modules]]
+type = "title"
+
+[[modules]]
+type = "os"
+
+[[modules]]
+type = "kernel"
+
+[[modules]]
+type = "uptime"
+
+[[modules]]
+type = "shell"
+
+[[modules]]
+type = "memory"
