@@ -136,10 +136,16 @@ fn the_logo_is_centred_vertically() {
     let lines: Vec<&str> = text.lines().collect();
 
     assert_eq!(lines.len(), 4, "信息有几行就出几行");
-    assert_eq!(lines[0], "    OS: v", "（4-2)/2 = 1，第一行留给画面");
+    assert_eq!(
+        lines[0], "        OS: v",
+        "（4-2)/2 = 1：第一行留给画面，但信息列仍要空出画面那一列（2 + 间隔 2）"
+    );
     assert!(lines[1].starts_with("##"), "画面从第二行开始：{lines:?}");
     assert!(lines[2].starts_with("##"));
-    assert_eq!(lines[3], "   CPU: v", "画面比信息短，最后一行只剩信息");
+    assert_eq!(
+        lines[3], "       CPU: v",
+        "画面比信息短，最后一行只剩信息——依然要在同一列上"
+    );
 }
 
 #[test]

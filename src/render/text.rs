@@ -111,6 +111,10 @@ impl Renderer for TextRenderer {
         // 信息行比画面高时，画面上下各留一点，看起来才是居中的。
         let top = lines.len().saturating_sub(art.len()) / 2;
         let height = lines.len().max(art.len());
+        // 与画面并排的行前面留的是「画面最宽那行 + GAP」。**没有画面同行的行
+        // （画面上下留白的那几行）也必须留出一样宽的一列**，否则键的起始列会在中间
+        // 跳一下：真机上就是这样——信息块上半部分在第 26 列、与画面并排的在第 65 列。
+        let margin = if art.is_empty() { 0 } else { art_width + GAP };
 
         for index in 0..height {
             let art_line = index
@@ -131,7 +135,10 @@ impl Renderer for TextRenderer {
                     write_art(out, art_line, color)?;
                     writeln!(out)?;
                 }
-                (None, Some(line)) => write_row(out, line, self.theme)?,
+                (None, Some(line)) => {
+                    write_spaces(out, margin)?;
+                    write_row(out, line, self.theme)?;
+                }
                 (None, None) => {}
             }
         }
@@ -285,6 +292,79 @@ fn write_spaces(out: &mut dyn Write, count: usize) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn render_to_string(renderer: &TextRenderer, report: &Report<'_>) -> String {
+        let mut out = Vec::new();
+        renderer.render(report, &mut out).unwrap();
+
+        String::from_utf8(out).unwrap()
+    }
+
+    /// 一屏「标题 + 分隔线 + 四行信息」，配一张三行的假画面。
+    fn entries() -> Vec<Info> {
+        vec![
+            Info::new("title", "", "me@host"),
+            Info::new("separator", "", ""),
+            Info::new("os", "OS", "Arch Linux"),
+            Info::new("host", "Host", "HP"),
+            Info::new("kernel", "Kernel", "7.2.4"),
+            Info::new("bios", "BIOS (UEFI)", "Insyde F.09"),
+        ]
+    }
+
+    /// 去掉颜色转义码。
+    ///
+    /// 渲染器**永远**带转义码，由 anstream 在写出去时按「是不是终端」决定去留
+    /// （文件头第 2 条），所以在这种直接接 `Vec<u8>` 的测试里必须先剥掉再量列，
+    /// 否则 `\x1b[96m` 这 5 个字符会被当成 5 列宽度。
+    fn visible(text: &str) -> String {
+        let mut out = String::new();
+        let mut chars = text.chars();
+
+        while let Some(ch) = chars.next() {
+            if ch == '\u{1b}' {
+                for next in chars.by_ref() {
+                    if next == 'm' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            out.push(ch);
+        }
+
+        out
+    }
+
+    #[test]
+    fn every_key_starts_at_the_same_column_even_around_a_logo() {
+        // 真机上被用户看到的问题：信息比画面高时画面会垂直居中，**画面上下留白那几行
+        // 没有补画面那一列**，于是键的起始列在中间跳（上半部分与画面并排的差着
+        // 「画面宽 + 间隔」）。这里用一张只有三行的假画面把那个分支逼出来。
+        let art = Logo {
+            id: "arch",
+            art: "a\nbb\nccc",
+        };
+        let entries = entries();
+        let report = Report {
+            logo: Some(&art),
+            entries: &entries,
+            failures: &[],
+        };
+        let text = render_to_string(&TextRenderer::with_columns(Theme::default(), 80), &report);
+        let text = visible(&text);
+
+        let columns: Vec<usize> = text
+            .lines()
+            .filter_map(|line| line.find(": ").map(|at| line[..at].chars().count()))
+            .collect();
+
+        assert!(columns.len() >= 4, "该有四行带键的行：\n{text}");
+        assert!(
+            columns.windows(2).all(|pair| pair[0] == pair[1]),
+            "键该从同一列开始，实际是 {columns:?}：\n{text}"
+        );
+    }
 
     #[test]
     fn alignment_uses_display_columns() {
