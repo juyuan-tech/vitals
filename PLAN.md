@@ -788,3 +788,37 @@ fastfetch 在本机印 `Bluetooth 1: G3 Mouse (71%)`。为了不做错，把本�
 
 > 这一条同时修正了 §5.7 早先那句「`Bluetooth` 只做连接状态与电量」——当时以为
 > `power_supply` 或 `/sys/class/bluetooth` 能给出这两样，真机一查，两处都给不出。
+
+## §5.13 `TerminalTheme` / `Wallpaper`：查证后定为不做
+
+### `TerminalTheme`：它问的是终端，不是文件
+
+上面 §5.7 里我写的是「读终端自己的配置文件」——**查了它的源码之后发现写错了**。
+`src/detection/terminaltheme/terminaltheme.c` 第 8-11 行：
+
+```c
+// Windows Terminal removes all `\e`s in its output
+if (ffGetTerminalResponse("\e]10;?\e\\" /*fg*/ "\e]11;?\e\\" /*bg*/,
+        "%*[^0-9]10;rgb:%" SCNx16 "/%" SCNx16 "/%" SCNx16 ...,
+```
+
+也就是说它往终端**写两个 OSC 查询**（`]10;?` 问前景、`]11;?` 问背景），再读终端的回话并
+解析 `rgb:R/G/B`；`terminaltheme_linux.c` 是空文件，Linux 上没有任何额外的数据源。
+真机验证：在伪终端里它吐出的正是这两个查询本身（`]10;?` `]11;?`），而不是任何配色值。
+
+所以这条路 = **与终端做一次带超时的问答往返**（要碰 `/dev/tty`、改 termios、用 poll 等回话）。
+本项目能写，但在**这个环境里验证不了**（我这个伪终端没有应答者），而它的值是「用户终端此刻
+实际渲染出来的颜色」——正是那种「猜不得」的数据。所以定为不做，理由与 §5.12 同类：
+不是没做，而是**没有可验证的真值就不写**。
+
+> 顺带一条：`~/.config/kitty/kitty.conf` 里确实有 `foreground #cdd6f4` / `background #1e1e2e`，
+> 但**读它不是 fastfetch 的做法**，两者的值也不保证一致（用户可能用主题覆盖、可动态改色）。
+> 差点因为「能找到真实文件」就把口径做偏——先查它的实现，省下了这个错。
+
+### `Wallpaper`：这台机器上没有源
+
+- 本机合成器是 niri，`~/.config/niri/*.kdl` 里**没有**任何 wallpaper 键（只有一句关于
+  `background` 的注释）。
+- fastfetch 在本机对 `Wallpaper` 的实测结果：**空的**（连伪终端下也是空）。
+
+没有数据源就没有可验证的真值，同样不做。
