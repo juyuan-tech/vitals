@@ -7,6 +7,12 @@ description = "Your system's vital signs, at a glance."
 license = "MIT OR Apache-2.0"
 keywords = ["system-info", "fetch", "neofetch", "fastfetch", "cli"]
 categories = ["command-line-utilities"]
+authors = ["juyuan-tech <gxydream@outlook.com>"]
+repository = "https://github.com/juyuan-tech/vitals"
+readme = "README.md"
+# 包只带用得上、读得懂的东西：设计笔记与工具链固定在仓库里有意义，
+# 跟着包发出去只会让下载它的人多读一份内部笔记。
+exclude = ["PLAN.md", "rust-toolchain.toml", ".github"]
 
 # 包名是 vitals-rs（crates.io 上的 vitals 已被占用），
 # 但用户敲的命令必须是 vitals——所以 [[bin]] 显式声明，不能靠默认推导。
