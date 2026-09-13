@@ -730,3 +730,39 @@ Codec (Decoder): MJPEG, H.264, HEVC / H.265, VP9, AV1
 
 **还差的显示差异**（§5.9 里的 medium 项）：`Disk` 的多挂载点、`Display` 的 EDID 键与
 `@ 1.74x in 14"`、`CPU`/`GPU` 的值形状、`Colors` 已做。`Monitor` 正在批 6 里做。
+
+## §5.11 交接：`Monitor` 的精确起点（本会话摸清、未动手）
+
+下一轮做 `Monitor` 时**不要**从头摸。已经查清的事实与锚点：
+
+`src/collectors/display.rs` 的现状（行号是 `ca473b0` 时的）：
+
+| 需要的数据 | 现状 | 锚点 |
+|---|---|---|
+| 分辨率 `2880x1800` | 有 | `parse_mode`（第 151 行） |
+| 精确刷新率 `120.001` | 差一步 | `refresh_of`（第 169-197 行）里就是 `pixel_clock / pixels` 的 f64，末尾 `.round()` 成了整数 |
+| 物理尺寸 `300x190 mm` | **没有解析** | 需新增 EDID 详细时序描述符（第 12/13 字节，单位 mm，含高半字节） |
+| EDID 名 `SDC4197` | **没有解析** | 需新增显示器名描述符（`00 00 00 FC` + 13 字节 ASCII，`0x0A` 结尾） |
+| 连接器名 `eDP-1` | 有 | `connectors`（第 60 行）+ `path_of`（第 134 行） |
+
+两条真值（本机 fastfetch 2.68.1 实测，逐字）：
+
+```
+Display (SDC4197): 2880x1800 @ 1.74x in 14", 120 Hz [Built-in]
+Monitor (SDC4197): 2880x1800 px @ 120.001 Hz - 300x190 mm (13.98 inches, 242.93 ppi)
+```
+
+- `Display` 印 `120 Hz`（四舍五入）；`Monitor` 印 `120.001`——**同一个数两种用法**，所以取数层要给
+  「精确值」，由各自的渲染决定怎么舍。这正是 §5.9 里 `Display` 的 EDID 键那条差异的另一半。
+- 换算关系（已验算）：`inches = sqrt(300² + 190²) / 25.4 = 13.98`、
+  `ppi = sqrt(2880² + 1800²) / inches = 242.93`。
+- `300x190` 与 `SDC4197` 都在 EDID 里，`display.rs` 已经读了 EDID（`refresh_of` 收的就是
+  `&[u8]`），所以**不要**另写一份读取逻辑，加解析就行。
+
+顺序：① 在 `display.rs` 里补这两个纯解析函数（带单测，合成 fixture 必须注明是合成的）
+→ ② 把「连接器 → 数据」整理成 `pub(crate)` 取数层，`Display` 的输出与全部现有测试一字不变
+→ ③ 写 `monitor.rs`（键 `Monitor (SDC4197)`、值按上面那行）→ ④ 接线 60 → 61、门禁、与
+`fastfetch -s Monitor -l none` 逐字对照后提交。
+
+> 注意：`display.rs` 的测试里已有 `edid_with(pixel_clock_10khz, width, height)` 这个合成
+> fixture helper（第 235 行附近），扩它比新造一个更省事，但要在注释里写明它是合成的。
