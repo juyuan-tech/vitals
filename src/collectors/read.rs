@@ -23,6 +23,18 @@ pub fn text(path: &str) -> Result<Option<String>, CollectError> {
     }
 }
 
+/// 读一个文件的**原始字节**。
+///
+/// 和 [`text`] 同一套错误规矩：不存在是**无数据**，其他失败是**真失败**。
+/// 二进制内容（EDID、DMI 条目）走这条——它们不是 UTF-8，用 [`text`] 读会失败。
+pub fn bytes(path: &str) -> Result<Option<Vec<u8>>, CollectError> {
+    match std::fs::read(path) {
+        Ok(content) => Ok(Some(content)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(CollectError::caused_by(format!("读取 {path} 失败"), source)),
+    }
+}
+
 /// 按顺序读第一个**存在**的文件。
 ///
 /// 用来实现规范里的回退链（`/etc/os-release` → `/usr/lib/os-release`）。
@@ -47,6 +59,15 @@ mod tests {
     fn missing_file_is_not_an_error() {
         // 这是整个错误策略的核心一条：不存在 ≠ 出错。
         assert_eq!(text("/definitely/not/here").unwrap(), None);
+    }
+
+    #[test]
+    fn bytes_reads_binary_content() {
+        // EDID、DMI 条目都是二进制，用 `text` 读会因为不是 UTF-8 而失败。
+        let content = bytes("/proc/self/cmdline").unwrap();
+
+        assert!(content.is_some(), "cmdline 该读得到");
+        assert_eq!(bytes("/definitely/not/here").unwrap(), None);
     }
 
     #[test]

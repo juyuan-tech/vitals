@@ -63,20 +63,20 @@ fn default_logo_is_auto() {
 }
 
 // ---------------------------------------------------------------------------
-// --module 是过滤，不是重排
+// --module 是选择：点谁采谁，顺序跟着你写
 // ---------------------------------------------------------------------------
 
 #[test]
-fn module_filter_keeps_the_configuration_order() {
-    // 用户写的是 cpu,os，但配置里的顺序是 os 在前——过滤不该重排。
+fn module_selection_follows_the_order_you_wrote() {
+    // 用户写的是 cpu,os，那 CPU 就该排在前面——配置里的顺序不该反过来盖掉它。
     let cli = parse(&["--module", "cpu,os"]);
     let settings = Settings::resolve(&cli, &Config::default());
 
-    assert_eq!(settings.module_names(), ["os", "cpu"]);
+    assert_eq!(settings.module_names(), ["cpu", "os"]);
 }
 
 #[test]
-fn module_filter_accepts_repeated_flags_as_well() {
+fn module_selection_accepts_repeated_flags_as_well() {
     let cli = parse(&["--module", "os", "--module", "cpu"]);
     let settings = Settings::resolve(&cli, &Config::default());
 
@@ -84,12 +84,31 @@ fn module_filter_accepts_repeated_flags_as_well() {
 }
 
 #[test]
-fn module_filtering_everything_out_is_allowed() {
-    // 配置里一个模块都没有，过滤器自然过滤不出东西：合法的空结果，不是错误。
+fn a_module_outside_the_config_is_still_selected() {
+    // 这条以前会红：`--module` 是从配置视图里过滤，配置里没有 cpu 就什么都不剩，
+    // 于是「点了一个不在默认视图里的模块」看起来像「这台机器没有它」。
     let cli = parse(&["--module", "cpu"]);
     let settings = Settings::resolve(&cli, &config_of(&[]));
 
-    assert!(settings.modules.is_empty());
+    assert_eq!(settings.module_names(), ["cpu"]);
+}
+
+#[test]
+fn module_selection_drops_the_configured_conditions() {
+    // 显式点名比配置文件里的条件更硬：点了 battery 就得看到 battery，
+    // 不该因为配置里挂着 `when-file-exists` 而被悄悄跳过。
+    let mut entry = ModuleEntry::new(ModuleType::Battery);
+    entry.when_file_exists = Some(std::path::PathBuf::from("/definitely/not/here"));
+    let config = Config {
+        config_version: 1,
+        modules: vec![entry],
+    };
+
+    let cli = parse(&["--module", "battery"]);
+    let settings = Settings::resolve(&cli, &config);
+
+    assert_eq!(settings.modules.len(), 1);
+    assert!(settings.modules[0].when_file_exists.is_none());
 }
 
 #[test]

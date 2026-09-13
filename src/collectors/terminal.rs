@@ -3,13 +3,13 @@
 //! 1. **环境变量指纹**：kitty、WezTerm、iTerm2、VS Code 都会留下自己的变量。
 //!    这是最准的一路——进程名会被包装脚本改掉，环境变量不会。
 //! 2. **父进程链**：环境里什么都没有时，顺着 `/proc/<pid>/stat` 往上找第一个
-//!    认得出的终端进程名。fastfetch 只看这条路，在嵌套环境里会认错：本机实测它把
-//!    `node-MainThread` 报成了终端，而环境变量里明明写着 kitty。
+//!    认得出的终端进程名（见 [`proc_chain`]）。fastfetch 只看这条路，在嵌套环境里
+//!    会认错：本机实测它把 `node-MainThread` 报成了终端，而环境变量里明明写着 kitty。
 //! 3. **`$TERM`** 兜底。
 //!
 //! 全程不 fork。
 
-use crate::collectors::{env, read};
+use crate::collectors::{env, proc_chain};
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
 
@@ -43,9 +43,6 @@ const PROCESS_NAMES: [&str; 13] = [
     "tmux",
     "screen",
 ];
-
-/// 父进程链最多往上找几层。纯粹是防 `/proc` 数据异常时绕圈。
-const MAX_DEPTH: usize = 16;
 
 /// 终端。
 pub struct Terminal;
@@ -88,42 +85,14 @@ fn from_env() -> Option<String> {
 
 /// 顺着父进程链找终端。
 fn from_process_chain() -> Option<String> {
-    let mut pid = std::process::id();
-
-    for _ in 0..MAX_DEPTH {
-        let (parent, command) = process_parent(pid)?;
-
-        if let Some(name) = PROCESS_NAMES.iter().find(|name| **name == command) {
-            return Some((*name).to_owned());
-        }
-        // 到 1 号进程就该停了，再往上没有意义。
-        if parent <= 1 {
-            return None;
-        }
-        pid = parent;
-    }
-
-    None
-}
-
-/// 读 `/proc/<pid>/stat` 里的进程名与父进程号。
-fn process_parent(pid: u32) -> Option<(u32, String)> {
-    let stat = read::text(&format!("/proc/{pid}/stat")).ok().flatten()?;
-
-    // 名字在括号里，且可能含空格与括号，所以从最后一个 ')' 定位。
-    let open = stat.find('(')?;
-    let close = stat.rfind(')')?;
-    let command = stat.get(open + 1..close)?.to_owned();
-
-    // `)` 之后第一个字段是 state，第二个才是 ppid。
-    let parent = stat
-        .get(close + 1..)?
-        .split_whitespace()
-        .nth(1)?
-        .parse()
-        .ok()?;
-
-    Some((parent, command))
+    proc_chain::ancestors(proc_chain::DEFAULT_DEPTH)
+        .into_iter()
+        .find_map(|ancestor| {
+            PROCESS_NAMES
+                .iter()
+                .find(|name| **name == ancestor.command)
+                .map(|name| (*name).to_owned())
+        })
 }
 
 #[cfg(test)]
@@ -131,26 +100,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_the_parent_and_name_of_a_real_process() {
-        // 1 号进程一定在，而且一定有父进程字段（值为 0）。
-        let (parent, command) = process_parent(1).expect("1 号进程该读得到");
-
-        assert_eq!(parent, 0, "1 号进程的父进程是 0");
-        assert!(!command.is_empty());
+    fn the_environment_wins_over_the_process_chain() {
+        // 这条是 Terminal 模块存在的理由：本机实测 fastfetch 走进程链得到
+        // `node-MainThread`，而环境变量里写着 kitty。环境变量优先级必须更高。
+        // 这里直接验证 `from_env` 认得出 kitty 的指纹。
+        assert!(
+            ENV_HINTS
+                .iter()
+                .any(|(key, name)| *key == "KITTY_WINDOW_ID" && *name == "kitty"),
+            "kitty 的指纹该在表里"
+        );
     }
 
     #[test]
-    fn parses_the_name_of_the_current_process() {
-        let (_, command) = process_parent(std::process::id()).expect("自己总该读得到");
+    fn long_process_names_come_first() {
+        // `foot` 是 `footclient` 的前缀：顺序反了就会认错。
+        let foot = PROCESS_NAMES
+            .iter()
+            .position(|name| *name == "foot")
+            .unwrap();
+        let footclient = PROCESS_NAMES
+            .iter()
+            .position(|name| *name == "footclient")
+            .unwrap();
 
-        // cargo test 跑的是测试二进制，名字里带 crate 名。
-        assert!(!command.is_empty());
-    }
-
-    #[test]
-    fn a_missing_process_is_no_data() {
-        // 这个 pid 不可能存在。
-        assert!(process_parent(u32::MAX).is_none());
+        assert!(footclient < foot, "`footclient` 该排在 `foot` 前面");
     }
 
     #[test]

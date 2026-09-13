@@ -307,16 +307,19 @@ Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapt
 下表是工作清单。**判据只有一条：能不能不开子进程拿到**——能读文件/系统调用的优先，
 需要外部命令的排在后面，且必须挂 `when-command-exists` 条件。
 
-| 批次 | 模块 | 数据来源 / 备注 |
-|---|---|---|
-| **已完成** | OS、Host、Kernel、Uptime、Shell、User、CPU、Memory、Disk、Rust | 见 §5.1 |
-| **第一批**（纯读取） | Title、Separator、Break、BIOS、Board、Chassis、Bootmgr、Swap、Locale、Loadavg、Processes、Terminal、TerminalSize、Editor、Version、InitSystem | DMI（`/sys/class/dmi/id`）、`/proc`、环境变量；全部零子进程 |
-| **第二批** | Packages、LocalIp、DNS、Wifi、Battery、PowerAdapter、Brightness、Users、TPM、PhysicalMemory、PhysicalDisk | 包数据库目录计数、`/sys/class/net`、`/sys/class/power_supply`、`/sys/class/backlight`、utmp、`/sys/class/tpm`、DMI type 17 |
-| **第三批** | DE、WM、Display/Monitor、Theme、Icons、Font、Cursor、WMTheme、DateTime、Colors | 环境变量 + `/proc` + `drm` sysfs；`DateTime` 需要自己解析 TZif（`localtime_r` 是 unsafe，禁止） |
-| **第四批** | GPU、OpenGL、Vulkan、OpenCL、Codec | GPU 走 `/sys/class/drm` + `pci.ids`（有就读，没有就报原始 ID）；GL/Vulkan 需要 `glxinfo`/`vulkaninfo`，挂条件 |
-| **第五批** | PublicIp、Weather、NetIO、DiskIO、CPUUsage、Top | 前两个要 `net` feature（`ureq`）；后四个是**差值采样**，需要两次读取加间隔 |
-| **第六批** | Btrfs、Zpool、Sound、Media、Player、Wallpaper、Camera、Gamepad、Mouse、Keyboard、Bluetooth、BluetoothRadio | 多数需要 ioctl / D-Bus / 设备树，逐个评估「值不值得为它开子进程」 |
-| **不属于模块** | Logo（查询内置 Logo，给 JSON 用）、Separator/Break（渲染原语，见 §6.1） | |
+| 批次 | 模块 | 数据来源 / 备注 | 状态 |
+|---|---|---|---|
+| **核心**（§5.1） | OS、Host、Kernel、Bios、Board、Chassis、Uptime、Loadavg、Processes、Cpu、Memory、Swap、Disk、User、Shell、Terminal、TerminalSize、Locale、Editor、Version、InitSystem、Rust | 全是 `/proc`、`/sys`、环境变量 | ✅ 22 |
+| **渲染原语** | Title、Separator、Break | 内容由渲染器决定，不是采集器 | ✅ 3 |
+| **第一批**（纯读取） | Packages、Battery、PowerAdapter、Brightness、Dns、Tpm | 包数据库目录计数、`/sys/class/power_supply`、`/sys/class/backlight`、`/etc/resolv.conf`（全是 stub 时转 `/run/systemd/resolve/resolv.conf`）、`/sys/class/tpm` | ✅ 6 |
+| **第二批** | Display、De、Wm | DRM sysfs + EDID 自己算刷新率；`XDG_CURRENT_DESKTOP` 整串→拆冒号→父进程链，版本查包数据库 | ✅ 3 |
+| **第三批**（进行中） | WMTheme、Theme、Icons、Font、Cursor | GTK `settings.ini`、KDE `kdeglobals`/`kwinrc`、`/usr/share/icons/default/index.theme` | ⏳ |
+| **第四批** | DateTime、Colors | TZif 自己解析（`localtime_r` 是 unsafe，禁止）；Colors 由渲染器算 | ⏳ |
+| **第五批** | Gpu、LocalIp、Wifi、Users、PhysicalMemory、PhysicalDisk | Gpu：`/sys/class/drm` + `pci.ids`（没有就报原始 ID）；网络要开 `rustix` 的 `net` feature；Users 读 utmp；PhysicalMemory 读 DMI type 17 | ⏳ |
+| **第六批** | OpenGL、Vulkan、OpenCL、Codec、Sound、Media、Player、Wallpaper、Camera、Gamepad、Mouse、Keyboard、Bluetooth | 多数要 ioctl / D-Bus / 设备树；**要开子进程的一律挂 `when-command-exists`**，且先问「这个值值不值得为它 fork」 | ⏳ |
+| **第七批** | NetIO、DiskIO、CPUUsage、Top、Btrfs、Zpool | 前四个是**差值采样**（两次读取加间隔，`CPUUsage` 的 Linux 实现若只读一次 `/proc/stat` 就只是「开机至今平均」，必须写明口径）；后两个读 `/sys/fs/btrfs`、`/proc/spl` | ⏳ |
+| **第八批** | PublicIp、Weather | 要 `net` feature（`ureq`） | ⏳ |
+| **不属于模块** | Logo（查询内置 Logo，给 JSON 用）、Separator/Break（渲染原语，见 §6.1） | | |
 
 **做得比 fastfetch 好的地方**（这是目标，不是口号）：
 
@@ -328,9 +331,17 @@ Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapt
 4. **JSON 带 schema 版本**，键名是契约；失败模块单独成 `failures`，不混进 `entries`。
 5. **「为什么这个模块没出来」说得清**：条件不满足时 `--verbose` 会说明是被哪个条件挡下的。
 6. **显示宽度对齐**按 Unicode 显示宽度算（CJK、组合字符不会歪）。
+7. **终端认得更准**：环境变量指纹先于父进程链。本机实测 fastfetch 报 `node-MainThread`，
+   我们报 `kitty`——嵌套环境里父进程链会被包装脚本带偏。
+8. **刷新率自己从 EDID 算**（像素时钟 ÷ 行总数 × 场总数），而且只在算出的分辨率与
+   `modes` 首选模式一致时才报；fastfetch 走 libdrm，且不设这道保险。
+9. **桌面/窗口管理器的版本查包数据库**：`gnome-shell`、`kwin`、`niri` 都是包，
+   pacman 与 dpkg 两条路都通；fastfetch 这条路只在 Debian 系走得通。
+10. **进程/线程数取内核自己的账**：读一次 `/proc/loadavg` 的总任务数，
+    与逐个打开 434 个 `/proc/<pid>/stat` 累加**完全相等**（2008 = 2008），耗时 6.9 ms → 0.3 ms。
 
-**明确不追平的**（追了反而更差）：Sixel/Kitty/Chafa 图像协议、`--watch` 动态刷新、
-天气这类需要联网账号的能力——除非用户明确要。
+**明确不追平的**：只有 Sixel/Kitty/Chafa 这类图像协议（要动终端图形栈，收益与风险
+不成比例）。`--watch` 动态刷新与天气/公网 IP 都在清单里，不算不追平。
 
 ---
 

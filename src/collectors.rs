@@ -8,7 +8,8 @@
 //!
 //! - [`read`] / [`env`]：读文件与环境变量，并把「没有」和「失败」分开
 //! - [`units`]：字节数与时长的格式化
-//! - [`os_release`] / [`accounts`] / [`dmi`] / [`meminfo`] / [`pkgdb`] / [`tty`]：
+//! - [`proc_chain`]：顺着父进程链认祖先（Terminal、DE、WM 共用）
+//! - [`os_release`] / [`accounts`] / [`dmi`] / [`meminfo`] / [`pkgdb`] / [`power_supply`] / [`tty`]：
 //!   被多个模块共用的系统数据源
 //!
 //! 目标是对标 fastfetch 的模块面（`PLAN.md` §5.4）。加一个模块要动三处：
@@ -16,12 +17,17 @@
 //! `tests/config.rs` 的往返测试会把漏掉的那处指出来。
 
 pub mod accounts;
+pub mod battery;
 pub mod bios;
 pub mod board;
+pub mod brightness;
 pub mod chassis;
 pub mod cpu;
+pub mod de;
 pub mod disk;
+pub mod display;
 pub mod dmi;
+pub mod dns;
 pub mod editor;
 pub mod env;
 pub mod host;
@@ -34,21 +40,28 @@ pub mod meminfo;
 pub mod memory;
 pub mod os;
 pub mod os_release;
+pub mod packages;
 pub mod pkgdb;
+pub mod power_adapter;
+pub mod power_supply;
+pub mod proc_chain;
 pub mod processes;
 pub mod read;
 pub mod rust;
 pub mod separator;
+pub mod session;
 pub mod shell;
 pub mod swap;
 pub mod terminal;
 pub mod terminal_size;
 pub mod title;
+pub mod tpm;
 pub mod tty;
 pub mod units;
 pub mod uptime;
 pub mod user;
 pub mod version;
+pub mod wm;
 
 use crate::core::collector::Collector;
 
@@ -86,4 +99,13 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &separator::Separator,
     &line_break::Break,
     &rust::Rust,
+    &battery::Battery,
+    &power_adapter::PowerAdapter,
+    &brightness::Brightness,
+    &dns::Dns,
+    &tpm::Tpm,
+    &packages::Packages,
+    &display::Display,
+    &de::Desktop,
+    &wm::WindowManager,
 ];

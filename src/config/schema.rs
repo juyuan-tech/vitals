@@ -260,11 +260,29 @@ pub enum ModuleType {
     Break,
     /// Rust 工具链。
     Rust,
+    /// 电池电量与状态。
+    Battery,
+    /// 外接电源接上了没有。
+    PowerAdapter,
+    /// 背光亮度。
+    Brightness,
+    /// 配置的 DNS 服务器。
+    Dns,
+    /// 可信平台模块（TPM）。
+    Tpm,
+    /// 已安装的包数。
+    Packages,
+    /// 显示器分辨率与刷新率。
+    Display,
+    /// 桌面环境。
+    De,
+    /// 窗口管理器 / 合成器。
+    Wm,
 }
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 34] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -290,30 +308,49 @@ impl ModuleType {
         Self::Separator,
         Self::Break,
         Self::Rust,
+        Self::Battery,
+        Self::PowerAdapter,
+        Self::Brightness,
+        Self::Dns,
+        Self::Tpm,
+        Self::Packages,
+        Self::Display,
+        Self::De,
+        Self::Wm,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
     ///
-    /// 选的是 fastfetch 默认视图里我们已经实现了的部分（外加自己的 Rust 模块），
-    /// 目标是一眼看上去就该有的那些。其余模块配一句 `type = "bios"` 就能加进来，
-    /// `--list-modules` 会列全。
-    pub const DEFAULT: [Self; 18] = [
+    /// 顺序照着 fastfetch 2.68.1 的默认视图排（`OS → Host → Kernel → … → Locale`），
+    /// 凡是它默认显示、我们也已经实现的，都在这儿。自己的东西只有三处：
+    /// `processes`、`loadavg`（各一行，一眼看到机器忙不忙）和 `rust`（本程序自己的版本）。
+    ///
+    /// 其余模块配一句 `type = "bios"` 就能加进来，`--list-modules` 会列全。
+    pub const DEFAULT: [Self; 26] = [
         Self::Title,
         Self::Separator,
         Self::Os,
         Self::Host,
         Self::Kernel,
         Self::Bios,
+        Self::Board,
+        Self::Chassis,
         Self::Uptime,
+        Self::Packages,
         Self::Shell,
+        Self::Display,
+        Self::De,
+        Self::Wm,
         Self::Terminal,
-        Self::Locale,
         Self::Cpu,
         Self::Memory,
         Self::Swap,
         Self::Disk,
         Self::Processes,
         Self::Loadavg,
+        Self::Battery,
+        Self::PowerAdapter,
+        Self::Locale,
         Self::Break,
         Self::Rust,
     ];
@@ -351,6 +388,15 @@ impl ModuleType {
             Self::Separator => "separator",
             Self::Break => "break",
             Self::Rust => "rust",
+            Self::Battery => "battery",
+            Self::PowerAdapter => "power-adapter",
+            Self::Brightness => "brightness",
+            Self::Dns => "dns",
+            Self::Tpm => "tpm",
+            Self::Packages => "packages",
+            Self::Display => "display",
+            Self::De => "de",
+            Self::Wm => "wm",
         }
     }
 }

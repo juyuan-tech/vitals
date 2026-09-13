@@ -41,7 +41,7 @@ pub struct Cli {
     #[arg(long, value_name = "auto|none|名称", default_value = "auto", value_parser = parse_logo)]
     pub logo: LogoChoice,
 
-    /// 只显示这些模块，逗号分隔。属于过滤，不改变配置里的顺序
+    /// 只显示这些模块，逗号分隔。顺序就是你写的顺序；配置里没有的也能点
     #[arg(long, value_name = "列表", value_delimiter = ',', value_parser = parse_module)]
     pub module: Option<Vec<ModuleType>>,
 
@@ -116,10 +116,11 @@ fn parse_module(name: &str) -> Result<ModuleType, String> {
 /// 叠完优先级之后的最终设置。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
-    /// 要采集的模块**连同它们的声明式条件**，顺序 = 配置里的顺序。
+    /// 要采集的模块**连同它们的声明式条件**，顺序 = 采集顺序。
     ///
-    /// 条件不在这里评估：`--module` 是用户的显式选择，压过配置里的条件，
-    /// 但条件本身要对着环境算（`PATH`、文件系统），那是 `crate::conditions` 的事。
+    /// 条件不在这里评估：条件要对着环境算（`PATH`、文件系统），那是
+    /// `crate::conditions` 的事。但 `--module` 点名过的模块会**丢掉**配置里的条件——
+    /// 显式点名是更强的意愿，用户既然点了它就说明他这会儿就要看它。
     pub modules: Vec<ModuleEntry>,
     /// Logo 选择。`--json` 时已被强制成 [`LogoChoice::None`]。
     pub logo: LogoChoice,
@@ -138,13 +139,19 @@ impl Settings {
     /// 按 CLI > 配置文件 > 内置默认 叠出最终设置。
     #[must_use]
     pub fn resolve(cli: &Cli, config: &Config) -> Self {
-        let mut modules: Vec<ModuleEntry> = config.modules.clone();
-
-        // `--module` 是**过滤**：只去掉没点名的，点过名的保持配置里的相对顺序。
-        // 所以 `--module cpu,os` 在默认配置下得到的是 `os, cpu`，不是 `cpu, os`。
-        if let Some(only) = &cli.module {
-            modules.retain(|entry| only.contains(&entry.module_type));
-        }
+        // `--module` 是**选择**，不是过滤：点谁采谁，顺序就是你写的顺序。
+        //
+        // 这里以前是 `retain`（从配置视图里挑掉没点名的）。那样 `--module battery`
+        // 在电池不在默认视图时一个字都不显示——看着像「这台机器没电池」，
+        // 其实是自己把它滤掉了。现在点名的模块一定出现：配置里有它的用配置里那份，
+        // 没有就按内置默认造一份（不带条件）。
+        let modules: Vec<ModuleEntry> = match &cli.module {
+            Some(only) => only
+                .iter()
+                .map(|module| ModuleEntry::new(*module))
+                .collect(),
+            None => config.modules.clone(),
+        };
 
         Self {
             modules,

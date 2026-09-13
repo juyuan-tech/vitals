@@ -2,6 +2,10 @@
 #
 # 由 `vitals --gen-config` 打印。这个文件**整体替换**内置默认：写了 modules，
 # 内置列表就不再生效，所以想少显示几个模块，得把要留的列全。
+#
+# 下面这份就是内置默认视图：顺序照着 fastfetch 2.68.1 的默认视图排
+# （OS → Host → Kernel → … → Locale），只多三样自己的东西：
+# processes、loadavg（各一行，一眼看到机器忙不忙）和 rust（本程序自己的版本）。
 
 config_version = 1
 
@@ -23,6 +27,10 @@ config_version = 1
 #   [[modules]]
 #   type = "disk"
 #   when-file-exists = "/dev/nvme0n1"
+#
+#   [[modules]]
+#   type = "brightness"
+#   when-file-exists = "/sys/class/backlight"
 
 [[modules]]
 type = "title"
@@ -43,16 +51,31 @@ type = "kernel"
 type = "bios"
 
 [[modules]]
+type = "board"
+
+[[modules]]
+type = "chassis"
+
+[[modules]]
 type = "uptime"
+
+[[modules]]
+type = "packages"
 
 [[modules]]
 type = "shell"
 
 [[modules]]
-type = "terminal"
+type = "display"
 
 [[modules]]
-type = "locale"
+type = "de"
+
+[[modules]]
+type = "wm"
+
+[[modules]]
+type = "terminal"
 
 [[modules]]
 type = "cpu"
@@ -71,6 +94,15 @@ type = "processes"
 
 [[modules]]
 type = "loadavg"
+
+[[modules]]
+type = "battery"
+
+[[modules]]
+type = "power-adapter"
+
+[[modules]]
+type = "locale"
 
 [[modules]]
 type = "break"
