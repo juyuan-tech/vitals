@@ -350,26 +350,59 @@ mod tests {
         assert_eq!(info.variable("read-count"), Some("164"));
     }
 
+    /// 自造一份 `/sys/block/<dev>/device/` 的样子，别去读宿主机的盘——
+    /// 型号是别人的，断言固定型号就会在别的机器上红（CI 上红过一次）。
+    fn write_field(dir: &std::path::Path, field: &str, text: &str) {
+        let device = dir.join("device");
+        std::fs::create_dir_all(&device).unwrap();
+        std::fs::write(device.join(field), text).unwrap();
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("vitals-blockdev-{}-{name}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
     #[test]
     fn the_nvme_name_falls_back_to_the_model() {
-        // 本机 `/sys/block/nvme0n1/device/` 下**只有** `model`、没有 `vendor`，
-        // 型号里自带厂商名：SAMSUNG MZVL21T0HCLR-00BH1（原文带一长串尾随空白）。
-        // 别的机器上未必有这块盘，所以先看在不在。
-        let dir = PathBuf::from("/sys/block/nvme0n1");
-        if dir.join("device").join("model").exists() {
-            let name = blockdev::name_from_sysfs(&dir, "nvme0n1").unwrap();
-            // 有 vendor 就拼在前面；没有就是纯型号。两种都算对。
-            assert!(
-                name == "SAMSUNG MZVL21T0HCLR-00BH1" || name.ends_with("MZVL21T0HCLR-00BH1"),
-                "实际是 {name}"
-            );
-            // `read::text` 必须把尾随空白去掉（原文是一长串空格）。
-            assert!(!name.ends_with(' '), "{name:?}");
-        }
+        let root = temp_dir("nvme-name");
 
-        // 虚拟盘两个文件都没有，退回设备名。
-        let zram = PathBuf::from("/sys/block/zram0");
-        assert_eq!(blockdev::name_from_sysfs(&zram, "zram0").unwrap(), "zram0");
+        // 只有 model、没有 vendor：用型号（原文可能带尾随空白，要去掉）。
+        let only_model = root.join("only-model");
+        write_field(&only_model, "model", "SAMSUNG MZVL21T0HCLR-00BH1   \n");
+        let name = blockdev::name_from_sysfs(&only_model, "nvme0n1").unwrap();
+        assert_eq!(name, "SAMSUNG MZVL21T0HCLR-00BH1");
+        assert!(!name.ends_with(' '), "{name:?}");
+
+        // vendor + model：厂商拼在前面。
+        let both = root.join("both");
+        write_field(&both, "vendor", "ACME\n");
+        write_field(&both, "model", "Fast Disk\n");
+        assert_eq!(
+            blockdev::name_from_sysfs(&both, "nvme0n1").unwrap(),
+            "ACME Fast Disk"
+        );
+
+        // 只有 vendor。
+        let only_vendor = root.join("only-vendor");
+        write_field(&only_vendor, "vendor", "ACME\n");
+        assert_eq!(
+            blockdev::name_from_sysfs(&only_vendor, "nvme0n1").unwrap(),
+            "ACME"
+        );
+
+        // 两个文件都没有（虚拟盘）：退回设备名。
+        let neither = root.join("neither");
+        std::fs::create_dir_all(neither.join("device")).unwrap();
+        assert_eq!(
+            blockdev::name_from_sysfs(&neither, "zram0").unwrap(),
+            "zram0"
+        );
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -377,7 +410,11 @@ mod tests {
         // 这条就是 upstream 的 "virtual device" 判据。
         // 本机 /sys/block/zram0/device 不存在（虚拟盘从来不挂 device），
         // /sys/block/nvme0n1/device 是指向 PCI 设备的符号链接。
-        assert!(!blockdev::is_physical(Path::new("/sys/block/zram0")).unwrap());
+        // 没有 device 子项 → 假。自造一个，不赌宿主机的虚拟盘叫不叫 zram0。
+        let root = temp_dir("is-physical");
+        std::fs::create_dir_all(root.join("virtual")).unwrap();
+        assert!(!blockdev::is_physical(&root.join("virtual")).unwrap());
+        std::fs::remove_dir_all(&root).ok();
 
         // 别的机器上未必有 nvme0n1，所以先看路径在不在再断言——
         // 这个测试在没有它的机器上也要绿。
