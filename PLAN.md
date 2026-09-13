@@ -377,6 +377,33 @@ Login Manager: login
 项目自己的版本是 `1.6.8`，epoch 只是打包排序用的。`pkgdb::version_of` 应该把 epoch 前缀去掉
 （`-pkgrel` 保留，与本机已有的 `Niri 26.04-1` 一致）。
 
+第二批参考（`fastfetch -s wifi:bluetooth:bluetoothradio:btrfs:zpool:netio:diskio:camera:gamepad:keyboard:mouse:media:player:wallpaper:physicalmemory:lm:datetime:terminaltheme:codec --pipe`）：
+
+```text
+Wi-Fi: down
+Bluetooth 1: G3 Mouse (71%)
+Bluetooth Radio (MyArch): Bluetooth 5.3 (Unknown)
+BTRFS (myArch): 52.42 GiB / 920.87 GiB (6%, 12% allocated)
+Network I/O (enp5s0f4u1u3c2): 326.97 KiB/s (IN) - 23.45 KiB/s (OUT)
+Disk I/O (SAMSUNG MZVL21T0HCLR-00BH1): 0 B/s (R) - 0 B/s (W)
+Camera 1: HP Wide Vision 5MP Camera: HP W - sRGB (2592x1944 px)
+Keyboard 1: AT Translated Set 2 keyboard
+Mouse 3: ELAN07D0:00 04F3:321A Touchpad
+Media: 抖音-记录美好生活 [Playing]
+Media Player: Douyin (Mozilla firefox)
+Login Manager: login
+Date & Time: 2026-09-13 16:10:51
+Codec (Encoder): H.264, HEVC / H.265, AV1
+Codec (Decoder): MJPEG, H.264, HEVC / H.265, VP9, AV1
+```
+
+几条读出来的：`Keyboard`/`Mouse`/`Camera`/`Bluetooth` 都按序号编号（`Keyboard 2:`），
+名字来自设备自己报的字符串；`Disk I/O` 按**物理盘**（键里带型号）而不是按分区；
+`Network I/O` 按网卡；`BTRFS (标签): 已用 / 总量 (百分比, 分配百分比)`。
+本机**没有**输出的：`Zpool`（没装 ZFS）、`Gamepad`、`Wallpaper`、`TerminalTheme`、
+`PhysicalMemory`（本机 DMI type 17 那条路没给东西，实现时要先查清是权限还是真没有）。
+`Media`/`Media Player` 走的是 MPRIS（D-Bus），`Codec` 是问 GPU 的能力——这两个要单独评估。
+
 **做得比 fastfetch 好的地方**（这是目标，不是口号）：
 
 1. **核心三十多个模块零子进程**：fastfetch 为拿终端名、字体、主题会起不少进程。
