@@ -712,3 +712,21 @@ Codec (Decoder): MJPEG, H.264, HEVC / H.265, VP9, AV1
 - **Rust 模块**：保留，只读文件、不开子进程。阶段 4 已落地，理由见 §5.1。
 - **`mod.rs`**：不用。阶段 1 起就由 `clippy::mod_module_files` 在 CI 里强制。
 - **Logo 放不下时隐藏**，不换小图、不截断值。理由见 §6.1。
+
+## §5.10 已经收掉的显示差异（逐条都有真机证据）
+
+写在这里是因为 §5.9 是「还差什么」，而下面这些**已经改完了**，混在一起看容易重复排查。
+
+| 项 | 改前 | 现在 | 证据 |
+|---|---|---|---|
+| Cursor | `Adwaita (Xcursor)` | `breeze (30px)` | 与 `fastfetch -s cursor` 一字不差；`$XCURSOR_THEME=breeze_cursors`+`$XCURSOR_SIZE=30` |
+| OS | `Arch Linux` | `Arch Linux x86_64` | `uname` 的 machine，不是编译期常量 |
+| Kernel | `7.2.4-arch1-2` | `Linux 7.2.4-arch1-2` | 裸版本仍在 `release` 变量里 |
+| Shell / Terminal | `zsh` / `kitty` | `zsh 5.9.2` / `kitty 0.48.2` | 版本走 `pkgdb::version_of`，查不到只印名字 |
+| Uptime | `1d 5h` | `1 day, 5 hours, 44 mins` | 非零单位最多三个，单复数跟数值 |
+| Window Manager | `WM: … (wayland)` | `Window Manager: … (Wayland)` | 键名与大小写都对齐 |
+| 默认视图 | 35 项 | 24 项（含末尾空行 + 色块） | `diff` 只差它多印的那条外部挂载 `Disk` |
+| 模块名 | 只认 `local-ip` | 也认 `LocalIp`/`localip` | 比较时忽略大小写与 `-`/`_`（只动 CLI，配置文件仍走 serde） |
+
+**还差的显示差异**（§5.9 里的 medium 项）：`Disk` 的多挂载点、`Display` 的 EDID 键与
+`@ 1.74x in 14"`、`CPU`/`GPU` 的值形状、`Colors` 已做。`Monitor` 正在批 6 里做。
