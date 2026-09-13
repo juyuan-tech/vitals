@@ -1,5 +1,7 @@
 # JSON 输出
 
+[English](json.en.md) | **中文**
+
 `vitals --json` 把这一屏打成一份 JSON，给脚本读。它不开颜色也不画 Logo——`Settings::resolve`
 在 `--json` 时就把这两样关掉了。
 

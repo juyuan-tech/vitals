@@ -1,5 +1,7 @@
 # Logo 与配色
 
+[English](logo.en.md) | **中文**
+
 ## 选 Logo
 
 `--logo` 的取值（`vitals --help` 原文）：`auto` 按发行版自动选、`none` 不显示、或直接给名称；

@@ -1,0 +1,250 @@
+.TH VITALS 1 "2026-09-13" "vitals 0.1.1" "User Commands"
+.SH NAME
+vitals \- your system's vitals, all at a glance
+.SH SYNOPSIS
+.B vitals
+.RI [ options ]
+.SH DESCRIPTION
+.B vitals
+is a system information tool (the fastfetch / neofetch class) with 61 modules.
+.PP
+It shells out for nothing: it reads
+.IR /proc ,
+.IR /sys ,
+.IR /etc
+and uses system calls directly. Zero subprocesses, zero
+.BR unsafe ,
+writes no files, sends no network packets. Every line it prints can be questioned
+about where it came from —
+.B \-\-sources
+prints the files each module
+.B actually
+read, recorded at runtime rather than kept as a hand-written list.
+.PP
+With no options it renders whatever the config file says; a config file replaces the
+built-in default view outright.
+.SH OPTIONS
+.TP
+.B \-\-config " " \fIPATH\fR
+Config file to use. Without it,
+.I $XDG_CONFIG_HOME/vitals/config.toml
+then
+.I $HOME/.config/vitals/config.toml
+are tried; if neither exists the built-in default is used. Naming a file that does not
+exist is an error (exit code 1); a missing default path silently falls back.
+.TP
+.B \-\-json
+Output JSON (turns off colors and the logo). Shape:
+.IR docs/json.md ;
+schema:
+.IR docs/vitals.schema.json .
+.TP
+.BI \-\-logo " auto|none|NAME"
+Logo:
+.B auto
+picks one by distribution (the default),
+.B none
+hides it, or name one directly. Names are case-insensitive, and an unknown name falls
+back to the generic art instead of failing.
+.TP
+.BI \-\-module " LIST"
+Show only these modules, comma-separated. The order is yours, and a module the config
+does not list can still be named.
+.TP
+.B \-\-no\-color
+Turn colors off; same as setting
+.BR NO_COLOR .
+.TP
+.B \-\-list\-modules
+List every available module (61 of them).
+.TP
+.B \-\-gen\-config
+Print the built-in default config to stdout, comments included.
+.TP
+.B \-\-verbose
+Write diagnostics (including the effective settings) to stderr.
+.TP
+.B \-\-explain
+Explain, module by module, why each one appeared or did not — shown, empty, skipped,
+failed, each with its own reason. It speaks about the
+.B result
+and therefore really collects once.
+.TP
+.B \-\-sources
+Print the files each module
+.B actually
+read. Given both this and
+.BR \-\-explain ,
+state is printed first, then evidence.
+.TP
+.BR \-h ", " \-\-help
+Print help.
+.TP
+.BR \-V ", " \-\-version
+Print version.
+.SH MODULES
+There are 61 modules;
+.B vitals \-\-list\-modules
+lists them and the repository file
+.IR docs/modules.md
+documents each one, including the files it reads. The reference has an English edition,
+.IR docs/modules.en.md .
+.PP
+Broad groups: system 13 (os, host, kernel, bios, board, chassis, uptime, datetime,
+version, init\-system, bootmgr, processes, loadavg); hardware 21; session and desktop 16;
+network and throughput 6; software 2 (packages, rust); layout 3 (title, separator, break).
+.PP
+Four of them — net\-io, disk\-io, cpu\-usage, top — are differential: each waits out a
+200 ms sampling window. They collect in parallel, so the total is about one window.
+.SH CONFIGURATION
+The config file is TOML, and TOML is the only format supported. It
+.B replaces
+the built-in default view: once it lists
+.BR modules ,
+the built-in list is gone.
+.PP
+Each module may carry conditions; when one is not satisfied the module is skipped, and a
+skip is not an error (the exit code is still 0):
+.B when\-file\-exists
+(a path exists),
+.B when\-command\-exists
+(a same-named file is found along
+.BR PATH ,
+the command is
+.B never
+executed) and
+.BR platforms .
+Several conditions are combined with AND.
+.PP
+Example configs live in
+.IR presets/ .
+.SH ENVIRONMENT
+.TP
+.B VITALS_LANG
+Help language, \fBzh\fR or \fBen\fR. Without it the locale decides
+.RB ( LC_ALL ,
+.BR LC_MESSAGES ,
+.BR LANG )
+and anything unclear means Chinese. Runtime messages (\fB\-\-explain\fR,
+.BR \-\-sources ,
+errors) are currently Chinese only; the help is bilingual.
+.TP
+.B NO_COLOR
+Turn colors off (same as
+.BR \-\-no\-color ).
+.TP
+.B CLICOLOR_FORCE
+Force color even when stdout is not a terminal.
+.TP
+.B COLUMNS
+Terminal width; it decides whether the logo is drawn beside the fields.
+.TP
+.BR XDG_CONFIG_HOME ", " HOME
+Where the config file is looked up.
+.TP
+.B PATH
+Used by
+.B when\-command\-exists
+for lookup only — never executed.
+.TP
+.BR LC_ALL ", " LC_CTYPE ", " LANG
+The locale module, and some formatting.
+.TP
+.BR TZ ", " TZDIR
+Time zone. Zone names are validated as paths, and relative names containing
+.B ..
+components are refused.
+.PP
+Several modules read further variables of their own
+.RB ( SHELL ,
+.BR USER ,
+.BR LOGNAME ,
+.BR VISUAL ,
+.BR EDITOR ,
+.BR XCURSOR_* ,
+.BR TERM* ,
+.BR XDG_* );
+the full list is in
+.IR docs/cli.md .
+.SH "EXIT STATUS"
+.TP
+.B 0
+Normal, including
+.BR \-\-explain ,
+.BR \-\-sources ,
+.BR \-\-list\-modules ,
+.B \-\-gen\-config
+and "one module failed to collect but the rest rendered fine". A module failure only
+warns on stderr and never invalidates the other modules' output.
+.TP
+.B 1
+Config read, parse or version error; or a write failure.
+.TP
+.B 2
+Argument error (unknown option, unknown module, extra positional argument).
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/vitals/config.toml
+User config.
+.TP
+.I /etc/os-release
+Distribution information. Use
+.B \-\-sources
+for the complete per-module list.
+.SH EXAMPLES
+.PP
+The default view:
+.PP
+.RS 4
+.EX
+vitals
+.EE
+.RE
+.PP
+Just a few modules:
+.PP
+.RS 4
+.EX
+vitals \-\-module os,cpu,memory
+.EE
+.RE
+.PP
+For scripts:
+.PP
+.RS 4
+.EX
+vitals \-\-json | jq \-r '.entries[] | "\\(.key): \\(.value)"'
+.EE
+.RE
+.PP
+Ask where a line came from, and why a module is missing:
+.PP
+.RS 4
+.EX
+vitals \-\-sources \-\-module os,host
+vitals \-\-explain \-\-module os,gamepad
+.EE
+.RE
+.PP
+Use an example config:
+.PP
+.RS 4
+.EX
+vitals \-\-config presets/headless.toml
+.EE
+.RE
+.SH "SEE ALSO"
+The repository's
+.IR docs/
+directory:
+.BR modules.md ,
+.BR configuration.md ,
+.BR cli.md ,
+.BR json.md ,
+.BR faq.md ,
+.BR logo.md ,
+each with an English
+.B .en.md
+edition. Security audit:
+.IR AUDIT.md
+(Chinese).

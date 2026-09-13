@@ -19,9 +19,10 @@ which files it actually read.
 - MSRV 1.85 (edition 2024)
 - Security audit: [`AUDIT.md`](AUDIT.md) (Chinese)
 
-> **Documentation language.** The primary documentation is Chinese; this file is the English
-> entry point. The built-in `--help` text is Chinese too. Per-file references below point at the
-> Chinese docs.
+> **Documentation language.** Every per-topic reference exists in Chinese (`docs/<name>.md`) and
+> in English (`docs/<name>.en.md`); the two link to each other at the top. The built-in help is
+> bilingual too (`VITALS_LANG=zh|en`). Runtime messages — `--explain`, `--sources`, errors — are
+> still Chinese only, so quoted program output stays Chinese even in the English references.
 
 ## Install
 
@@ -125,7 +126,7 @@ datetime  失败  打开 /etc/shadow 失败
 ## Modules
 
 61 of them; the full per-module reference (including the files each one reads) is in
-**[`docs/modules.md`](docs/modules.md)** (Chinese).
+**[`docs/modules.md`](docs/modules.en.md)** (Chinese).
 
 **System** (13)　`os` `host` `kernel` `bios` `board` `chassis` `uptime` `datetime` `version`
 `init-system` `bootmgr` `processes` `loadavg`
@@ -148,7 +149,7 @@ datetime  失败  打开 /etc/shadow 失败
 `~/.config/vitals/config.toml` (honours `XDG_CONFIG_HOME`), or point `--config` elsewhere.
 `--gen-config` prints a commented template. The file **replaces the built-in default wholesale**:
 once you list `modules`, the built-in list no longer applies. Per-key reference:
-**[`docs/configuration.md`](docs/configuration.md)** (Chinese).
+**[`docs/configuration.md`](docs/configuration.en.md)** (Chinese).
 
 Each module may declare conditions; an unmet condition skips it (skipping is not an error):
 
@@ -171,7 +172,7 @@ file of that name along `PATH`. It never `fork`s or `exec`s.
 
 `vitals --json` prints `{"schema_version": 1, "entries": [...], "failures": [...]}`; the field
 names are a contract. Shape, compatibility policy and `jq` examples:
-**[`docs/json.md`](docs/json.md)**; a machine-readable schema:
+**[`docs/json.md`](docs/json.en.md)**; a machine-readable schema:
 **[`docs/vitals.schema.json`](docs/vitals.schema.json)**.
 
 ## Performance
@@ -209,18 +210,21 @@ How to report a security issue: [`SECURITY.md`](SECURITY.md).
 
 ## Documentation
 
-The primary documentation is Chinese; the per-topic references live under `docs/`:
+Every per-topic reference exists in both languages: the files under `docs/` are the Chinese
+originals, and each has an English twin (`docs/<name>.en.md`). The two files link to each
+other at the top. Quoted program output is verbatim in whatever language the program
+printed it — runtime messages (`--explain`, `--sources`, errors) are still Chinese only.
 
 | File | Contents |
 | --- | --- |
-| [`docs/modules.md`](docs/modules.md) | all 61 modules: what each shows and which files it reads |
-| [`docs/configuration.md`](docs/configuration.md) | per-key config reference, conditions, examples |
-| [`docs/cli.md`](docs/cli.md) | every option, exit codes, environment variables |
-| [`docs/json.md`](docs/json.md) | the `--json` shape and how to consume it |
+| [`docs/modules.en.md`](docs/modules.en.md) | all 61 modules: what each shows and which files it reads |
+| [`docs/configuration.en.md`](docs/configuration.en.md) | per-key config reference, conditions, examples |
+| [`docs/cli.en.md`](docs/cli.en.md) | every option, exit codes, environment variables |
+| [`docs/json.en.md`](docs/json.en.md) | the `--json` shape and how to consume it |
 | [`docs/vitals.schema.json`](docs/vitals.schema.json) | JSON Schema (draft 2020-12) |
-| [`docs/faq.md`](docs/faq.md) | FAQ, every answer measured |
-| [`docs/logo.md`](docs/logo.md) | logos and colours |
-| [`doc/vitals.1`](doc/vitals.1) | man page (`man ./doc/vitals.1`) |
+| [`docs/faq.en.md`](docs/faq.en.md) | FAQ, every answer measured |
+| [`docs/logo.en.md`](docs/logo.en.md) | logos and colours |
+| [`doc/vitals.en.1`](doc/vitals.en.1) | man page, English (`man ./doc/vitals.en.1`; the Chinese one is `doc/vitals.1`) |
 | [`presets/`](presets) | example configs: minimal / desktop / headless / all |
 | [`completions/`](completions) | bash and zsh completions (no fish: untested here, and untested things are not shipped) |
 | [`AUDIT.md`](AUDIT.md) | security and quality audit (Chinese) |

@@ -1,5 +1,7 @@
 # 命令行参考
 
+[English](cli.en.md) | **中文**
+
 本文描述 `vitals`（版本 0.1.1）的命令行行为。命令行只有选项，没有位置参数；多给一个位置参数会以退出码 2 结束。
 
 文中每个命令都在本机真实执行过，输出片段为原样截取（过长处截断，未改写数值）。
@@ -8,7 +10,7 @@
 Usage: vitals [OPTIONS]
 ```
 
-`-h` 打印摘要（首行是英文标语 `Your system's vital signs, at a glance.`），`--help` 打印完整说明（首行是中文 `你的系统生命体征，一眼看全。`）。两者列出的选项集合相同。
+`-h` 打印摘要（首行是英文标语 `Your system's vitals, all at a glance.`），`--help` 打印完整说明（首行是中文 `你的系统生命体征，一眼看全。`）。两者列出的选项集合相同。
 
 ## 选项一览
 
@@ -346,7 +348,7 @@ locale 只取语言主体：`zh_CN.UTF-8` → `zh`、`en-US` → `en`。**拿不
 
 ```
 $ VITALS_LANG=en vitals --module nope
-error: invalid value 'nope' for '--module <LIST>': unknown module `nope`; available: os, host, kernel, …（后面还有 58 个模块名）
+error: invalid value 'nope' for '--module <LIST>': unknown module `nope`; available: os, host, kernel, …（其余模块名从略）
 
 $ LANG=en_US.UTF-8 vitals -h | head -1
 Your system's vitals, all at a glance.

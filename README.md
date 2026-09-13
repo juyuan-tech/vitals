@@ -251,6 +251,9 @@ $ cargo fmt --all -- --check
 | [`AUDIT.md`](AUDIT.md) | 安全与质量审计报告 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本变更 |
 
+每份参考文档都有英文版：`docs/<名字>.en.md`（`modules`、`configuration`、`cli`、`json`、`faq`、`logo`），
+两份文件头互相链接；man page 同样两版（`doc/vitals.1` 中文、`doc/vitals.en.1` 英文）。
+
 ## 许可
 
 MIT OR Apache-2.0，任选其一。见 `LICENSE-MIT` 与 `LICENSE-APACHE`。
