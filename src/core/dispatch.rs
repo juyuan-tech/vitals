@@ -11,6 +11,7 @@
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
 use crate::core::sources;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// 一次调度的结果。
 ///
@@ -114,36 +115,54 @@ impl<'a> Dispatcher<'a> {
         // 收益最明显的是采样模块：四个各自睡 200 ms 的模块串起来是 821 ms（真机实测），
         // 而它们的等待期是空转；并行之后总时长≈一次窗口。
         //
-        // 来源记录用的是线程局部（`core::sources`），所以清空与取走必须在**同一个线程**
-        // 里完成——这就是每个任务自己 `clear`、自己 `take` 的原因。
-        let collected: Vec<Collected> = std::thread::scope(|scope| {
-            let handles: Vec<_> = runnable
-                .iter()
-                .map(|collector| {
-                    scope.spawn(move || {
-                        sources::clear();
-                        let result = collector.collect(ctx);
-                        let paths = sources::take();
+        // 线程数**有上限**（[`WORKERS`]），不是「一条模块一个线程」：后者能被配置直接
+        // 触发资源耗尽（写 3000 条重复模块就要 3000 个线程），而且 `scope.spawn` 在起不了
+        // 线程时会 panic，那时连一句「哪个模块失败了」都报不出来。这里改成一个共享计数器
+        // 派活，起不来线程就少起几个、当前线程把剩下的干掉——降级，不 panic。
+        let work: &[&dyn Collector] = &runnable;
+        let next = AtomicUsize::new(0);
 
-                        Collected { result, paths }
-                    })
-                })
-                .collect();
+        let batches: Vec<Vec<(usize, Collected)>> = std::thread::scope(|scope| {
+            let mut handles = Vec::new();
 
-            handles
+            for _ in 0..work.len().min(WORKERS) {
+                let spawned = std::thread::Builder::new()
+                    .name("vitals-collect".to_owned())
+                    .spawn_scoped(scope, || drain(&next, work, ctx));
+
+                match spawned {
+                    Ok(handle) => handles.push(handle),
+                    Err(_) => break,
+                }
+            }
+
+            // 当前线程一起干活：工作线程一个也没起来时，这一段就是全部的计算。
+            let leftover = drain(&next, work, ctx);
+
+            let mut batches: Vec<Vec<(usize, Collected)>> = handles
                 .into_iter()
-                .map(|handle| {
-                    // 某个模块 panic 不该拖垮整趟输出：把它记成这个模块的失败，
-                    // 其余模块照常渲染（与「一个模块出错不中断整体」同一条规矩）。
-                    handle.join().unwrap_or_else(|_| Collected {
-                        result: Err(CollectError::new("采集线程异常结束")),
-                        paths: Vec::new(),
-                    })
-                })
-                .collect()
+                .filter_map(|handle| handle.join().ok())
+                .collect();
+            batches.push(leftover);
+
+            batches
         });
 
-        for (collector, collected) in runnable.iter().zip(collected) {
+        // 按序号摆回配置顺序。缺席的序号意味着那个模块所在的线程异常结束了：
+        // 记成它的失败，其余模块照常渲染（与「一个模块出错不中断整体」同一条规矩）。
+        let mut slots: Vec<Option<Collected>> = (0..work.len()).map(|_| None).collect();
+        for (index, item) in batches.into_iter().flatten() {
+            if let Some(slot) = slots.get_mut(index) {
+                *slot = Some(item);
+            }
+        }
+
+        for (collector, slot) in work.iter().zip(slots) {
+            let collected = slot.unwrap_or_else(|| Collected {
+                result: Err(CollectError::new("采集线程异常结束")),
+                paths: Vec::new(),
+            });
+
             match collected.result {
                 // 空 Vec 走到这里也一样：extend 什么都不做，不留痕。
                 Ok(entries) => outcome.entries.extend(entries),
@@ -166,4 +185,42 @@ impl<'a> Dispatcher<'a> {
             .copied()
             .find(|collector| collector.name() == name)
     }
+}
+
+/// 同时跑几个模块。
+///
+/// 不按模块数起线程：配置里写 3000 条重复模块就得到 3000 个线程，那是配置能直接触发的
+/// 资源耗尽。16 足够——真正需要并行的只有四个各自要等采样窗口的模块
+/// （`net-io`/`disk-io`/`cpu-usage`/`top`，见各自的文档），其余都是毫秒级。
+const WORKERS: usize = 16;
+
+/// 从共享计数器上领活干，直到领完；每件活带着自己的序号回去。
+///
+/// 序号是行序的依据：线程按完成顺序往各自的 `Vec` 里写，最后按序号排回来，
+/// 于是显示顺序 = 配置顺序，与完成先后无关。
+///
+/// 取号用 `Relaxed` 就够：这里只需要「每个号只被取到一次」这一个原子性，
+/// 不需要用它去同步别的内存。
+fn drain(next: &AtomicUsize, work: &[&dyn Collector], ctx: &Context) -> Vec<(usize, Collected)> {
+    let mut done = Vec::new();
+
+    loop {
+        let index = next.fetch_add(1, Ordering::Relaxed);
+        let Some(collector) = work.get(index) else {
+            return done;
+        };
+
+        done.push((index, collect_one(*collector, ctx)));
+    }
+}
+
+/// 跑一个模块，并把**这个线程**读过的文件路径一起带回来。
+///
+/// 来源记录是线程局部的（`core::sources`），所以清空与取走必须在同一个线程里完成。
+fn collect_one(collector: &dyn Collector, ctx: &Context) -> Collected {
+    sources::clear();
+    let result = collector.collect(ctx);
+    let paths = sources::take();
+
+    Collected { result, paths }
 }

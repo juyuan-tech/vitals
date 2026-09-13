@@ -460,3 +460,37 @@ fn parallel_collection_keeps_the_configured_order() {
 
     assert!(top < os, "顺序该按配置来，而不是按完成先后：{text}");
 }
+
+/// 配置里写大量重复模块时：条目一条不少、顺序不乱。
+///
+/// 这条盯的是调度器的资源边界。早先的实现是「一条模块一个线程」：3000 条重复模块就要
+/// 3000 个线程，而 `scope.spawn` 在起不了线程时会 panic——连一句「哪个模块失败了」
+/// 都报不出来。现在线程数有上限，用共享计数器派活。
+///
+/// 顺序用交替的两个模块盯住：一旦并行结果按「完成先后」落座，这里立刻红。
+#[test]
+fn a_huge_module_list_keeps_every_entry_in_order() {
+    let entries = ["[[modules]]\ntype = \"os\"", "[[modules]]\ntype = \"host\""];
+    let text = (0..1500)
+        .flat_map(|_| entries)
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let path = config_file("many-duplicate-modules.toml", &text);
+    let output = vitals_with_config(&path, &["--explain"]);
+    assert!(output.status.success(), "退出码 {:?}", output.status.code());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let names: Vec<&str> = stdout
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|name| *name == "os" || *name == "host")
+        .collect();
+
+    assert_eq!(names.len(), 3000, "条目数该是 3000");
+
+    for (index, name) in names.iter().enumerate() {
+        let expected = if index % 2 == 0 { "os" } else { "host" };
+        assert_eq!(*name, expected, "第 {index} 条的顺序不对");
+    }
+}

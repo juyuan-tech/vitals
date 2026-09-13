@@ -130,3 +130,32 @@ mod tests {
         assert_eq!(first(&paths).unwrap(), None);
     }
 }
+
+#[cfg(test)]
+mod read_cap_tests {
+    use super::*;
+
+    /// 超过上限**报错**，不截断、也不把整个文件读进内存。
+    ///
+    /// 用稀疏文件（`set_len` 只动元数据，不真占磁盘）。边界两侧都试：
+    /// 正好等于上限要能读，多一个字节就要报错——这是 `take(MAX_READ + 1)` 那个
+    /// 「多读一个字节」的用意。
+    #[test]
+    fn refuses_files_over_the_limit_but_reads_the_boundary() {
+        let path = std::env::temp_dir().join(format!("vitals-read-cap-{}", std::process::id()));
+        let shown = path.to_string_lossy().into_owned();
+
+        let file = std::fs::File::create(&path).expect("建临时文件");
+
+        file.set_len(MAX_READ).expect("拉到上限");
+        let at_limit = text(&shown);
+        assert!(matches!(at_limit, Ok(Some(_))), "正好等于上限该能读");
+
+        file.set_len(MAX_READ + 1).expect("再多一个字节");
+        let over = text(&shown).expect_err("超限必须报错");
+        assert!(over.to_string().contains("超过读取上限"), "实际：{over}");
+
+        drop(file);
+        std::fs::remove_file(&path).ok();
+    }
+}
