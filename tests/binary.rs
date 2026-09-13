@@ -381,3 +381,32 @@ fn a_command_condition_looks_at_path_but_never_runs_the_command() {
         "条件检查把脚本执行了——「只查 PATH，不执行命令」是硬约束"
     );
 }
+
+#[test]
+fn explain_reports_every_module_and_its_state() {
+    let output = vitals(&["--explain", "--module", "gamepad,os"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let text = stdout(&output);
+    let lines: Vec<&str> = text.lines().collect();
+
+    // 每个配置项一行，顺序与配置一致（它是报告，不是画面）。
+    assert_eq!(lines.len(), 2, "两项配置该有两行：{text:?}");
+    assert!(lines[0].starts_with("gamepad"), "{text:?}");
+    assert!(lines[1].starts_with("os"), "{text:?}");
+
+    // 四态只有这四种，且每行都带状态——不像默认输出那样「少一行」就没了下文。
+    for line in &lines {
+        assert!(
+            ["显示", "空", "跳过", "失败"]
+                .iter()
+                .any(|state| line.split_whitespace().any(|word| word == *state)),
+            "每行都要有明确状态：{line:?}"
+        );
+    }
+
+    // os 在哪台机器上都有数据；这一条同时钉住「显示」这条路能走通。
+    assert!(lines[1].contains("显示"), "OS 一定有数据：{text:?}");
+    assert!(!lines[1].contains("空"), "{text:?}");
+}

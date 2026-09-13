@@ -13,8 +13,8 @@ use clap::Parser;
 use vitals_rs::cli::{Cli, LogoChoice, Settings};
 use vitals_rs::collectors::os_release;
 use vitals_rs::conditions;
-use vitals_rs::config::{self, ModuleType};
-use vitals_rs::core::dispatch::Failure;
+use vitals_rs::config::{self, ModuleEntry, ModuleType};
+use vitals_rs::core::dispatch::{Failure, RunOutcome};
 use vitals_rs::core::render::{RenderError, Renderer, Report};
 use vitals_rs::render::json::JsonRenderer;
 use vitals_rs::render::logo;
@@ -103,6 +103,14 @@ fn render(settings: &Settings) -> ExitCode {
     // 失败的模块照实说，但不中断——采到的那些照常渲染。
     report_failures(&outcome.failures, settings.verbose);
 
+    // `--explain` 对着**结果**说话，而不是对着配置：显示 / 空 / 跳过 / 失败，
+    // 四种状态各有理由。它天然要真跑一遍采集，否则「空」和「显示」分不出来。
+    if settings.explain {
+        explain(&settings.modules, &plan, &outcome);
+
+        return ExitCode::SUCCESS;
+    }
+
     // Logo：auto 按发行版匹配；none 不画；给了名字就用名字，找不到退回通用那张。
     let entry = match &settings.logo {
         LogoChoice::None => None,
@@ -164,5 +172,46 @@ fn report_failures(failures: &[Failure], verbose: bool) {
             eprintln!("{PROGRAM}:   因为：{error}");
             cause = error.source();
         }
+    }
+}
+
+/// `--explain` 的报告：按配置顺序逐项说明。
+///
+/// 为什么需要它：这类工具默认只会「少一行」——用户分不清是配置没写、条件不满足、
+/// 这台机器真没有数据，还是采集出错了。尤其**「空」与「跳过」是两回事**：
+/// 前者是采过了、确实没东西（比如没摄像头），后者是条件挡住、根本没去采。
+///
+/// 四种状态各自给一句能追下去的理由：跳过给条件（平台/命令/路径），失败给错误原因，
+/// 显示给条数，空就说这台机器上没有。
+fn explain(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcome) {
+    let width = modules
+        .iter()
+        .map(|entry| entry.module_type.name().len())
+        .max()
+        .unwrap_or(0);
+
+    for entry in modules {
+        let name = entry.module_type.name();
+
+        let (state, detail) =
+            if let Some(skipped) = plan.skipped.iter().find(|item| item.module == name) {
+                ("跳过", skipped.reason.describe())
+            } else if let Some(failure) = outcome.failures.iter().find(|item| item.module == name) {
+                ("失败", failure.error.to_string())
+            } else {
+                let count = outcome
+                    .entries
+                    .iter()
+                    .filter(|info| info.module == name)
+                    .count();
+
+                if count == 0 {
+                    ("空", "这台机器上没有可显示的数据".to_owned())
+                } else {
+                    ("显示", format!("{count} 项"))
+                }
+            };
+
+        println!("{name:width$}  {state}  {detail}");
     }
 }

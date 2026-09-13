@@ -60,6 +60,14 @@ pub struct Cli {
     /// 把诊断信息（含最终生效的设置）写到 stderr
     #[arg(long)]
     pub verbose: bool,
+
+    /// 逐项说明每个模块为什么出现、或为什么没有出现。
+    ///
+    /// 与 `--verbose` 的分工：`--verbose` 只说「谁被条件挡住了」，而且写到 stderr；
+    /// `--explain` 对着**结果**说话——显示 / 空 / 跳过 / 失败，四种状态各有理由。
+    /// 要分辨「空」与「显示」，它得真跑一遍采集，所以会花一次采集的时间。
+    #[arg(long)]
+    pub explain: bool,
 }
 
 /// Logo 的选择。
@@ -131,6 +139,8 @@ pub struct Settings {
     pub json: bool,
     /// 打印诊断信息。
     pub verbose: bool,
+    /// `--explain`：打印逐项诊断后结束，不渲染画面。
+    pub explain: bool,
 }
 
 impl Settings {
@@ -161,6 +171,7 @@ impl Settings {
             allow_color: !cli.no_color && !cli.json,
             json: cli.json,
             verbose: cli.verbose,
+            explain: cli.explain,
         }
     }
 
