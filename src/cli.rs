@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::config::{Config, ModuleType};
+use crate::config::{Config, ModuleEntry, ModuleType};
 
 // 注意：下面这个文档注释会被 clap 当成 `--help` 的详细说明，所以只写给用户看的话。
 // 维护者提醒：`name = "vitals"` 不能省——clap 默认取包名，也就是 `vitals-rs`，
@@ -116,8 +116,11 @@ fn parse_module(name: &str) -> Result<ModuleType, String> {
 /// 叠完优先级之后的最终设置。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
-    /// 要采集的模块，顺序 = 配置里的顺序。
-    pub modules: Vec<ModuleType>,
+    /// 要采集的模块**连同它们的声明式条件**，顺序 = 配置里的顺序。
+    ///
+    /// 条件不在这里评估：`--module` 是用户的显式选择，压过配置里的条件，
+    /// 但条件本身要对着环境算（`PATH`、文件系统），那是 `crate::conditions` 的事。
+    pub modules: Vec<ModuleEntry>,
     /// Logo 选择。`--json` 时已被强制成 [`LogoChoice::None`]。
     pub logo: LogoChoice,
     /// 是否**允许**上色。
@@ -135,16 +138,12 @@ impl Settings {
     /// 按 CLI > 配置文件 > 内置默认 叠出最终设置。
     #[must_use]
     pub fn resolve(cli: &Cli, config: &Config) -> Self {
-        let mut modules: Vec<ModuleType> = config
-            .modules
-            .iter()
-            .map(|entry| entry.module_type)
-            .collect();
+        let mut modules: Vec<ModuleEntry> = config.modules.clone();
 
         // `--module` 是**过滤**：只去掉没点名的，点过名的保持配置里的相对顺序。
         // 所以 `--module cpu,os` 在默认配置下得到的是 `os, cpu`，不是 `cpu, os`。
         if let Some(only) = &cli.module {
-            modules.retain(|module| only.contains(module));
+            modules.retain(|entry| only.contains(&entry.module_type));
         }
 
         Self {
@@ -163,7 +162,10 @@ impl Settings {
     /// 生效的模块名，按采集顺序。
     #[must_use]
     pub fn module_names(&self) -> Vec<&'static str> {
-        self.modules.iter().map(|module| module.name()).collect()
+        self.modules
+            .iter()
+            .map(|entry| entry.module_type.name())
+            .collect()
     }
 
     /// `--verbose` 用的诊断行。

@@ -30,7 +30,7 @@ fn default_template_parses_back_to_the_builtin_default() {
 }
 
 #[test]
-fn default_covers_all_ten_modules_in_plan_order() {
+fn the_default_view_is_the_curated_list() {
     let names: Vec<&str> = Config::default()
         .modules
         .iter()
@@ -39,10 +39,29 @@ fn default_covers_all_ten_modules_in_plan_order() {
 
     assert_eq!(
         names,
-        [
-            "os", "host", "kernel", "uptime", "shell", "user", "cpu", "memory", "disk", "rust"
-        ]
+        ModuleType::DEFAULT
+            .iter()
+            .map(|module| module.name())
+            .collect::<Vec<_>>(),
+        "默认视图就是 `ModuleType::DEFAULT`，顺序一致"
     );
+    assert!(
+        names.len() < ModuleType::ALL.len(),
+        "默认视图是**选出来的**，不是全部模块；全部模块见 --list-modules"
+    );
+}
+
+#[test]
+fn the_default_view_starts_with_a_title_and_a_rule() {
+    // fastfetch 默认视图也是这么开头的：`用户@主机名`，然后一条横线。
+    let names: Vec<&str> = Config::default()
+        .modules
+        .iter()
+        .map(|entry| entry.module_type.name())
+        .collect();
+
+    assert_eq!(names.first(), Some(&"title"));
+    assert_eq!(names.get(1), Some(&"separator"));
 }
 
 // ---------------------------------------------------------------------------

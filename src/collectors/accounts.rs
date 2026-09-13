@@ -4,7 +4,7 @@
 //! 而 uid 是内核给的，骗不了。环境变量只作兜底——精简容器里常常没有
 //! 对应的 passwd 条目，那时环境变量是唯一的线索。
 
-use crate::collectors::read;
+use crate::collectors::{env, read};
 use crate::core::collector::CollectError;
 
 /// 真实 uid 的来源。
@@ -96,6 +96,21 @@ pub fn current() -> Result<Option<Account>, CollectError> {
     Ok(parse(&passwd)
         .into_iter()
         .find(|account| account.uid == uid))
+}
+
+/// 兜底用的环境变量，顺序即优先级。
+pub const ENV: [&str; 2] = ["USER", "LOGNAME"];
+
+/// 当前用户的登录名。
+///
+/// 顺序：uid 查 `/etc/passwd` → 环境变量。User 与 Title 两个模块都要这个名字，
+/// 所以解析放在这里一处，免得两边各写一遍、再各自漂移。
+pub fn current_name() -> Result<Option<String>, CollectError> {
+    if let Some(account) = current()? {
+        return Ok(Some(account.name));
+    }
+
+    Ok(env::first(&ENV))
 }
 
 #[cfg(test)]

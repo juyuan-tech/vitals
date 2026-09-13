@@ -45,11 +45,8 @@ fn no_arguments_keeps_everything_at_its_default() {
 
     assert_eq!(
         settings.modules,
-        Config::default()
-            .modules
-            .iter()
-            .map(|e| e.module_type)
-            .collect::<Vec<_>>()
+        Config::default().modules,
+        "不带参数时，模块列表就是内置默认"
     );
     assert_eq!(settings.logo, LogoChoice::Auto);
     assert!(

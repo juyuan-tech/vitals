@@ -6,9 +6,6 @@ use crate::collectors::{accounts, env};
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
 
-/// uid 查不到时的退路。
-const ENV: [&str; 2] = ["USER", "LOGNAME"];
-
 /// 用户。
 pub struct User;
 
@@ -23,7 +20,7 @@ impl Collector for User {
         let name = match &account {
             Some(account) => account.name.clone(),
             // 容器里常常没有对应的 passwd 条目，这时只能信环境变量。
-            None => match env::first(&ENV) {
+            None => match env::first(&accounts::ENV) {
                 Some(name) => name,
                 None => return Ok(Vec::new()),
             },

@@ -15,6 +15,7 @@
 
 pub mod cli;
 pub mod collectors;
+pub mod conditions;
 pub mod config;
 pub mod core;
 pub mod render;

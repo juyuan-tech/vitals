@@ -16,7 +16,7 @@ mod path;
 mod schema;
 
 pub use crate::config::path::config_path;
-pub use crate::config::schema::{Config, ModuleEntry, ModuleType};
+pub use crate::config::schema::{Config, HostOs, ModuleEntry, ModuleType};
 
 use std::path::{Path, PathBuf};
 

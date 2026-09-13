@@ -12,6 +12,7 @@ use clap::Parser;
 
 use vitals_rs::cli::{Cli, LogoChoice, Settings};
 use vitals_rs::collectors::os_release;
+use vitals_rs::conditions;
 use vitals_rs::config::{self, ModuleType};
 use vitals_rs::core::dispatch::Failure;
 use vitals_rs::core::render::{RenderError, Renderer, Report};
@@ -82,8 +83,22 @@ fn render(settings: &Settings) -> ExitCode {
         TIMEOUT,
     );
 
-    let plan = settings.module_names();
-    let outcome = Dispatcher::new(COLLECTORS).run(&plan, &context);
+    // 声明式条件在调度前统一评估：不满足的模块直接不进名单，不报错。
+    let plan = conditions::plan(&settings.modules);
+
+    // 「跳过」是正常情况（这台机器没有电池），所以默认不出声；
+    // `--verbose` 才说清楚谁被什么挡下来了——不然只能靠猜。
+    if settings.verbose {
+        for skipped in &plan.skipped {
+            eprintln!(
+                "{PROGRAM}: 跳过 {}：{}",
+                skipped.module,
+                skipped.reason.describe()
+            );
+        }
+    }
+
+    let outcome = Dispatcher::new(COLLECTORS).run(&plan.names, &context);
 
     // 失败的模块照实说，但不中断——采到的那些照常渲染。
     report_failures(&outcome.failures, settings.verbose);

@@ -133,8 +133,16 @@ fn list_modules_needs_no_system_access() {
     let text = stdout(&output);
 
     assert!(output.status.success());
-    assert_eq!(text.lines().count(), 10);
+    assert_eq!(
+        text.lines().count(),
+        vitals_rs::config::ModuleType::ALL.len(),
+        "--list-modules 列的是全部模块"
+    );
     assert!(text.lines().any(|line| line == "memory"));
+    assert!(
+        text.lines().any(|line| line == "terminal-size"),
+        "多词的模块名用连字符"
+    );
 }
 
 #[test]
@@ -160,7 +168,11 @@ fn json_output_is_valid_json() {
         serde_json::from_slice(&output.stdout).expect("--json 的输出必须是合法 JSON");
 
     assert_eq!(document["schema_version"], 1);
-    assert_eq!(document["entries"][0]["type"], "os", "顺序跟着配置走");
+    assert_eq!(
+        document["entries"][0]["type"], "title",
+        "顺序跟着配置走：默认视图的第一条是标题"
+    );
+    assert_eq!(document["entries"][0]["key"], "", "标题没有键");
     assert!(document["failures"].as_array().unwrap().is_empty());
 }
 
@@ -191,4 +203,180 @@ fn json_still_reports_errors_on_stderr() {
     assert_eq!(output.status.code(), Some(1));
     assert!(stdout(&output).is_empty());
     assert!(stderr(&output).contains("读取配置文件"));
+}
+
+// ---------------------------------------------------------------------------
+// 排版原语：标题、分隔线、空行
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_title_has_no_key_and_the_rule_matches_the_widest_line() {
+    let text = stdout(&vitals(&[
+        "--module",
+        "title,separator,os",
+        "--logo",
+        "none",
+    ]));
+    let lines: Vec<&str> = text.lines().collect();
+
+    assert_eq!(lines.len(), 3, "{text}");
+    assert!(!lines[0].contains(": "), "标题不该印成 `键: 值`：{text}");
+    // 横线的长度 = 其它行里最宽的那条。
+    let widest = lines[0]
+        .chars()
+        .count()
+        .max("OS: Arch Linux".chars().count());
+    assert_eq!(lines[1], "─".repeat(widest), "横线该跟着最宽的那行");
+    assert_eq!(lines[2], "OS: Arch Linux");
+}
+
+#[test]
+fn json_leaves_out_the_layout_only_primitives() {
+    let document: serde_json::Value =
+        serde_json::from_slice(&vitals(&["--json", "--module", "title,separator,break,os"]).stdout)
+            .unwrap();
+    let types: Vec<&str> = document["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["type"].as_str().unwrap())
+        .collect();
+
+    assert_eq!(
+        types,
+        ["title", "os"],
+        "分隔线与空行只在文本版式里有意义，JSON 里不该出现"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 声明式条件（阶段 7）：精确跳过，而且不产生子进程
+// ---------------------------------------------------------------------------
+
+/// 把一份配置写到 `target/` 下的临时目录，返回它的路径。
+///
+/// 用 `CARGO_TARGET_TMPDIR` 而不是 `/tmp`：它由 cargo 提供、跟着 `target/` 一起被忽略，
+/// 也不会在只读的构建环境里失败。
+fn config_file(name: &str, text: &str) -> std::path::PathBuf {
+    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    std::fs::write(&path, text).expect("写临时配置");
+
+    path
+}
+
+/// 跑一次 vitals，用 `--config` 指到指定配置。
+fn vitals_with_config(path: &std::path::Path, extra: &[&str]) -> Output {
+    let shown = path.display().to_string();
+    let mut args = vec!["--config", shown.as_str()];
+    args.extend_from_slice(extra);
+
+    vitals(&args)
+}
+
+#[test]
+fn a_condition_skips_exactly_the_module_it_names() {
+    let path = config_file(
+        "conditions.toml",
+        r#"
+        [[modules]]
+        type = "os"
+
+        [[modules]]
+        type = "memory"
+        when-file-exists = "/nonexistent/vitals-test"
+
+        [[modules]]
+        type = "bios"
+        platforms = ["windows"]
+
+        [[modules]]
+        type = "kernel"
+        "#,
+    );
+
+    let output = vitals_with_config(&path, &[]);
+    let text = stdout(&output);
+
+    assert!(output.status.success());
+    assert!(text.contains("OS:"));
+    assert!(text.contains("Kernel:"), "没有条件的模块照常采集：{text}");
+    assert!(
+        !text.contains("Memory:"),
+        "文件不存在，memory 该被跳过：{text}"
+    );
+    assert!(
+        !text.contains("BIOS"),
+        "平台不是 windows，bios 该被跳过：{text}"
+    );
+}
+
+#[test]
+fn verbose_explains_every_skip_on_stderr() {
+    let path = config_file(
+        "conditions-verbose.toml",
+        r#"
+        [[modules]]
+        type = "os"
+
+        [[modules]]
+        type = "memory"
+        when-file-exists = "/nonexistent/vitals-test"
+        "#,
+    );
+
+    let output = vitals_with_config(&path, &["--verbose"]);
+    let errors = stderr(&output);
+
+    assert!(errors.contains("跳过 memory"), "{errors}");
+    assert!(errors.contains("/nonexistent/vitals-test"), "{errors}");
+    // 「为什么这个模块没出来」是诊断，不该混进结果里。
+    assert!(!stdout(&output).contains("跳过"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_command_condition_looks_at_path_but_never_runs_the_command() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // 造一个「一被执行就会留下痕迹」的可执行文件，并让它成为唯一的 PATH。
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("fake-path");
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = dir.join("被执行了");
+    let script = dir.join("vitals-test-must-not-run");
+    std::fs::write(
+        &script,
+        format!("#!/bin/sh\ntouch '{}'\n", marker.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let config = config_file(
+        "command-condition.toml",
+        r#"
+        [[modules]]
+        type = "os"
+
+        [[modules]]
+        type = "memory"
+        when-command-exists = "vitals-test-must-not-run"
+        "#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_vitals"))
+        .args(["--config", &config.display().to_string()])
+        .env("PATH", &dir)
+        .env("XDG_CONFIG_HOME", "/nonexistent/vitals-for-tests")
+        .env_remove("COLUMNS")
+        .output()
+        .expect("跑不动自己的二进制");
+    let text = stdout(&output);
+
+    assert!(
+        text.contains("Memory:"),
+        "命令在 PATH 里，memory 该照常采集：{text}"
+    );
+    assert!(
+        !marker.exists(),
+        "条件检查把脚本执行了——「只查 PATH，不执行命令」是硬约束"
+    );
 }

@@ -42,7 +42,11 @@ fn the_registry_covers_exactly_the_modules_the_config_knows() {
     from_config.sort_unstable();
 
     assert_eq!(from_registry, from_config);
-    assert_eq!(from_config.len(), 10, "v0.1 就是这十个");
+    assert!(
+        from_config.len() >= 25,
+        "模块面要对标 fastfetch（`PLAN.md` §5.4），只多不少；现在有 {} 个",
+        from_config.len()
+    );
 }
 
 #[test]
@@ -74,13 +78,28 @@ fn the_kernel_backed_modules_always_have_data() {
 
 #[test]
 fn every_entry_has_a_non_empty_shape() {
+    /// 排版原语：它们的内容由渲染器决定，采集器只发一个空标记。
+    const LAYOUT: [&str; 2] = ["separator", "break"];
+
     let plan = registered();
     let outcome = Dispatcher::new(COLLECTORS).run(&plan, &context());
 
     assert!(!outcome.entries.is_empty());
     for info in &outcome.entries {
-        assert!(!info.key.is_empty(), "{} 的 key 是空的", info.module);
+        if LAYOUT.contains(&info.module) {
+            assert!(
+                info.key.is_empty() && info.value.is_empty(),
+                "{} 只该发一个空标记",
+                info.module
+            );
+            continue;
+        }
+
         assert!(!info.value.is_empty(), "{} 的值是空的", info.module);
+        // 标题是唯一允许空键的：它是标题，不该印成 `键: 值`。
+        if info.module != "title" {
+            assert!(!info.key.is_empty(), "{} 的 key 是空的", info.module);
+        }
         assert!(plan.contains(&info.module), "{} 不在计划里", info.module);
         // 采集器不许把换行带进值里——渲染器要按行排版。
         assert!(!info.value.contains('\n'), "{} 的值里有换行", info.module);

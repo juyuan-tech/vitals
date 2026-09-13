@@ -232,3 +232,94 @@ fn no_color_strips_them_as_well() {
 
     assert!(!output.contains('\u{1b}'));
 }
+
+// ---------------------------------------------------------------------------
+// 无键行与分隔线：标题、空行、横线
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_keyless_line_prints_only_its_value() {
+    // 标题行：没有键，就不该补空格、也不该印 `: `。
+    let entries = vec![
+        Info::new("title", "", "gxyarch@MyArch"),
+        Info::new("os", "OS", "Arch Linux"),
+    ];
+
+    let output = render(&TextRenderer::with_columns(plain(), 80), None, &entries);
+
+    assert_eq!(output, "gxyarch@MyArch\nOS: Arch Linux\n");
+}
+
+#[test]
+fn a_keyless_line_does_not_widen_the_key_column() {
+    // 空键要是参与了「谁是最宽的键」，别的行就会多出一段没意义的前置空格。
+    let entries = vec![
+        Info::new("title", "", "gxyarch@MyArch"),
+        Info::new("kernel", "Kernel", "7.2.4-arch1-2"),
+    ];
+
+    let output = render(&TextRenderer::with_columns(plain(), 80), None, &entries);
+
+    assert_eq!(output, "gxyarch@MyArch\nKernel: 7.2.4-arch1-2\n");
+}
+
+#[test]
+fn the_separator_is_as_wide_as_the_widest_line() {
+    let entries = vec![
+        Info::new("title", "", "gxyarch@MyArch"),
+        Info::new("separator", "", ""),
+        Info::new("os", "OS", "Arch Linux"),
+        Info::new("kernel", "Kernel", "7.2.4-arch1-2"),
+    ];
+
+    let output = render(&TextRenderer::with_columns(plain(), 80), None, &entries);
+    let lines: Vec<&str> = output.lines().collect();
+
+    // 最宽的一行是 `Kernel: 7.2.4-arch1-2`（21 列），横线就跟它一样长。
+    assert_eq!(lines[1].chars().count(), 21);
+    assert_eq!(lines[1], "─".repeat(21));
+    assert_eq!(lines[0], "gxyarch@MyArch");
+    assert_eq!(lines[2], "    OS: Arch Linux", "键右对齐到 Kernel 的宽度");
+}
+
+#[test]
+fn a_separator_alone_is_empty() {
+    // 没有别的行，横线就长不了——不能变成一条 0 宽的东西再画出一行空白。
+    let entries = vec![Info::new("separator", "", "")];
+    let output = render(&TextRenderer::with_columns(plain(), 80), None, &entries);
+
+    assert_eq!(output, "\n");
+}
+
+#[test]
+fn a_break_is_an_empty_line() {
+    let entries = vec![
+        Info::new("os", "OS", "Arch Linux"),
+        Info::new("break", "", ""),
+        Info::new("rust", "Rust", "stable"),
+    ];
+
+    let output = render(&TextRenderer::with_columns(plain(), 80), None, &entries);
+
+    // 键右对齐：`Rust` 比 `OS` 宽两格，所以 OS 前面补两个空格。
+    assert_eq!(output, "  OS: Arch Linux\n\nRust: stable\n");
+}
+
+#[test]
+fn the_rule_does_not_count_towards_the_logo_decision() {
+    // 横线的长度是渲染器算出来的，不该反过来撑大信息列、把 Logo 挤掉。
+    let entries = vec![
+        Info::new("title", "", "gxyarch@MyArch"),
+        Info::new("separator", "", ""),
+        Info::new("os", "OS", "Arch Linux"),
+    ];
+
+    let output = render(
+        &TextRenderer::with_columns(plain(), 40),
+        Some(&logo()),
+        &entries,
+    );
+
+    // Logo 宽 2 + 间隔 2 + 信息列 21 = 25 ≤ 40，画得下。
+    assert!(output.contains("##"), "Logo 该画出来：{output}");
+}

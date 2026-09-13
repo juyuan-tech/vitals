@@ -71,7 +71,14 @@ impl Renderer for JsonRenderer {
     fn render(&self, report: &Report<'_>, out: &mut dyn Write) -> Result<(), RenderError> {
         let document = Document {
             schema_version: SCHEMA_VERSION,
-            entries: report.entries.iter().map(Entry::from).collect(),
+            // 空键空值的是排版原语（分隔线、空行）：它们只在文本版式里有意义，
+            // 对读 JSON 的程序来说是一对空字符串，不如不出现。
+            entries: report
+                .entries
+                .iter()
+                .filter(|info| !(info.key.is_empty() && info.value.is_empty()))
+                .map(Entry::from)
+                .collect(),
             failures: report
                 .failures
                 .iter()

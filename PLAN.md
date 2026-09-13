@@ -292,6 +292,46 @@ OS、Host、Kernel、Uptime、Shell、User、CPU、Memory、Disk、Rust。
 
 CPU 模块只负责：型号、物理/逻辑核心数（必要时加频率）。
 
+> **新基准（用户指定）**：目标是**全面对标 fastfetch 并做得更好**，不再满足于十个模块。
+> 于是 `cpuusage` 归入「可选模块、默认不开、文案标注真实语义」，见 §5.4。
+
+### 5.4 对标 fastfetch 的完整工作清单
+
+基准：**fastfetch 2.68.1，76 个模块，默认视图 26 项**。它的默认结构是
+
+```text
+Title:Separator:OS:Host:Kernel:Uptime:Packages:Shell:Display:DE:WM:WMTheme:Theme:Icons:Font:
+Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapter:Locale:Break:Colors
+```
+
+下表是工作清单。**判据只有一条：能不能不开子进程拿到**——能读文件/系统调用的优先，
+需要外部命令的排在后面，且必须挂 `when-command-exists` 条件。
+
+| 批次 | 模块 | 数据来源 / 备注 |
+|---|---|---|
+| **已完成** | OS、Host、Kernel、Uptime、Shell、User、CPU、Memory、Disk、Rust | 见 §5.1 |
+| **第一批**（纯读取） | Title、Separator、Break、BIOS、Board、Chassis、Bootmgr、Swap、Locale、Loadavg、Processes、Terminal、TerminalSize、Editor、Version、InitSystem | DMI（`/sys/class/dmi/id`）、`/proc`、环境变量；全部零子进程 |
+| **第二批** | Packages、LocalIp、DNS、Wifi、Battery、PowerAdapter、Brightness、Users、TPM、PhysicalMemory、PhysicalDisk | 包数据库目录计数、`/sys/class/net`、`/sys/class/power_supply`、`/sys/class/backlight`、utmp、`/sys/class/tpm`、DMI type 17 |
+| **第三批** | DE、WM、Display/Monitor、Theme、Icons、Font、Cursor、WMTheme、DateTime、Colors | 环境变量 + `/proc` + `drm` sysfs；`DateTime` 需要自己解析 TZif（`localtime_r` 是 unsafe，禁止） |
+| **第四批** | GPU、OpenGL、Vulkan、OpenCL、Codec | GPU 走 `/sys/class/drm` + `pci.ids`（有就读，没有就报原始 ID）；GL/Vulkan 需要 `glxinfo`/`vulkaninfo`，挂条件 |
+| **第五批** | PublicIp、Weather、NetIO、DiskIO、CPUUsage、Top | 前两个要 `net` feature（`ureq`）；后四个是**差值采样**，需要两次读取加间隔 |
+| **第六批** | Btrfs、Zpool、Sound、Media、Player、Wallpaper、Camera、Gamepad、Mouse、Keyboard、Bluetooth、BluetoothRadio | 多数需要 ioctl / D-Bus / 设备树，逐个评估「值不值得为它开子进程」 |
+| **不属于模块** | Logo（查询内置 Logo，给 JSON 用）、Separator/Break（渲染原语，见 §6.1） | |
+
+**做得比 fastfetch 好的地方**（这是目标，不是口号）：
+
+1. **核心三十多个模块零子进程**：fastfetch 为拿终端名、字体、主题会起不少进程。
+   我们的原则是「能读文件就不 fork」——冷启动更快，也没有 shell 转义与超时的连带风险。
+2. **配置校验严格**：未知字段、未知模块名、未知平台名一律报错并列出合法取值；
+   fastfetch 的 JSONC 宽容得多，拼错一个键会静默失效。
+3. **`--gen-config` 打到 stdout**，不写用户的 `~/.config`。
+4. **JSON 带 schema 版本**，键名是契约；失败模块单独成 `failures`，不混进 `entries`。
+5. **「为什么这个模块没出来」说得清**：条件不满足时 `--verbose` 会说明是被哪个条件挡下的。
+6. **显示宽度对齐**按 Unicode 显示宽度算（CJK、组合字符不会歪）。
+
+**明确不追平的**（追了反而更差）：Sixel/Kitty/Chafa 图像协议、`--watch` 动态刷新、
+天气这类需要联网账号的能力——除非用户明确要。
+
 ---
 
 ## 六、渲染设计

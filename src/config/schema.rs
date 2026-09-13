@@ -9,6 +9,8 @@
 //! 每个结构都带 `deny_unknown_fields`：计划里明确要求未知字段报错，
 //! 拼错一个键名不该静默通过。
 
+use std::path::PathBuf;
+
 use serde::Deserialize;
 
 use crate::config::CURRENT_CONFIG_VERSION;
@@ -61,11 +63,14 @@ pub struct Config {
 }
 
 impl Default for Config {
-    /// 内置默认：十个基础模块，按 `PLAN.md` §5.1 的顺序。
+    /// 内置默认：`ModuleType::DEFAULT` 那一串，顺序就是显示顺序。
+    ///
+    /// 注意默认视图**不是**全部模块：全采一遍会让输出长得没人愿意看，
+    /// 而且 `--list-modules` 已经把可选项都列出来了。
     fn default() -> Self {
         Self {
             config_version: CURRENT_CONFIG_VERSION,
-            modules: ModuleType::ALL
+            modules: ModuleType::DEFAULT
                 .iter()
                 .copied()
                 .map(ModuleEntry::new)
@@ -80,64 +85,236 @@ impl Default for Config {
 /// 计划里定的就是「数组表 + 类型标签」，而且类型标签走枚举后，
 /// 写错一个字母 serde 会直接报 `unknown variant \`cpuu\`, expected one of ...`，
 /// 比 untagged 枚举那句 “data did not match any variant” 有用得多。
-/// 阶段 7 的声明式条件（`platforms` / `when-command-exists`）也挂在这里。
+/// 声明式条件（`PLAN.md` §2.5）也挂在这里。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModuleEntry {
     /// 模块的类型标签，例如 `"os"`。
     #[serde(rename = "type")]
     pub module_type: ModuleType,
+
+    /// 只在这些平台上采集。空表示不限。
+    #[serde(default)]
+    pub platforms: Vec<HostOs>,
+
+    /// 命令不在 `PATH` 里就跳过这个模块。**只查 PATH，不执行命令**（`PLAN.md` §2.5）。
+    #[serde(default, rename = "when-command-exists")]
+    pub when_command_exists: Option<String>,
+
+    /// 路径不存在就跳过这个模块。
+    #[serde(default, rename = "when-file-exists")]
+    pub when_file_exists: Option<PathBuf>,
 }
 
 impl ModuleEntry {
-    /// 建一项。
+    /// 建一项，不带任何条件。
     #[must_use]
     pub const fn new(module_type: ModuleType) -> Self {
-        Self { module_type }
+        Self {
+            module_type,
+            platforms: Vec::new(),
+            when_command_exists: None,
+            when_file_exists: None,
+        }
     }
 }
 
-/// v0.1 的十个基础模块。
+/// 操作系统：`platforms` 条件的取值。
+///
+/// 同样是枚举而不是字符串（理由同 [`ModuleType`]）：写错一个字母，
+/// serde 会报 ``unknown variant `linx`, expected one of ...``，把合法取值一并列出来。
+///
+/// 名字与 `std::env::consts::OS` 的拼法保持一致——判定「够不够得着这个平台」
+/// 就是拿它和编译目标比一下。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HostOs {
+    /// Linux。绝大多数的发行版在这里；Android 单独算。
+    Linux,
+    /// macOS。
+    Macos,
+    /// Windows。
+    Windows,
+    /// FreeBSD。
+    Freebsd,
+    /// OpenBSD。
+    Openbsd,
+    /// NetBSD。
+    Netbsd,
+    /// Android。
+    Android,
+    /// Solaris。
+    Solaris,
+    /// illumos。
+    Illumos,
+}
+
+impl HostOs {
+    /// 全部平台，顺序稳定——错误信息里按这个顺序列出来。
+    pub const ALL: [Self; 9] = [
+        Self::Linux,
+        Self::Macos,
+        Self::Windows,
+        Self::Freebsd,
+        Self::Openbsd,
+        Self::Netbsd,
+        Self::Android,
+        Self::Solaris,
+        Self::Illumos,
+    ];
+
+    /// 平台名，与 `std::env::consts::OS` 同拼法。
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Linux => "linux",
+            Self::Macos => "macos",
+            Self::Windows => "windows",
+            Self::Freebsd => "freebsd",
+            Self::Openbsd => "openbsd",
+            Self::Netbsd => "netbsd",
+            Self::Android => "android",
+            Self::Solaris => "solaris",
+            Self::Illumos => "illumos",
+        }
+    }
+
+    /// 名字 → 平台。不另抄一份名单，避免两边漂移。
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|platform| platform.name() == name)
+    }
+
+    /// 本程序跑在哪个操作系统上。
+    ///
+    /// `env::consts::OS` 是编译期常量，所以这个问题的答案在编译时就已经定了。
+    /// 返回 `None` 表示这个目标平台不在上面的名单里——那时带 `platforms` 的条件
+    /// 一律不满足（见 `crate::conditions`）。
+    #[must_use]
+    pub fn current() -> Option<Self> {
+        Self::from_name(std::env::consts::OS)
+    }
+}
+
+/// 模块清单。**这是配置里 `type` 的合法取值，也是 JSON 里的 `type` 字段。**
 ///
 /// 枚举而不是字符串：这样「配置里写了个不存在的模块」在解析期就报错，
 /// 而不是等到运行时才发现少采了一个模块。
+///
+/// 目标是对标 fastfetch 的模块面（`PLAN.md` §5.4），所以这个枚举会长到几十个。
+/// 加模块的顺序是：先在这里加一个变体、`name()` 加一行、`COLLECTORS` 注册一个，
+/// `tests/config.rs` 的往返测试会盯着这三处别漏。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModuleType {
     /// 操作系统。
     Os,
-    /// 主机名。
+    /// 机器型号。
     Host,
     /// 内核版本。
     Kernel,
+    /// 固件（BIOS/UEFI）。
+    Bios,
+    /// 主板。
+    Board,
+    /// 机箱类型（笔记本还是台式机）。
+    Chassis,
     /// 开机时长。
     Uptime,
-    /// 当前 shell。
-    Shell,
-    /// 当前用户。
-    User,
+    /// 平均负载。
+    Loadavg,
+    /// 进程数与线程数。
+    Processes,
     /// CPU 型号与核心数。
     Cpu,
     /// 内存用量。
     Memory,
+    /// 交换空间用量。
+    Swap,
     /// 磁盘用量。
     Disk,
+    /// 当前用户。
+    User,
+    /// 当前 shell。
+    Shell,
+    /// 当前终端。
+    Terminal,
+    /// 终端尺寸。
+    TerminalSize,
+    /// 区域设置。
+    Locale,
+    /// 默认编辑器。
+    Editor,
+    /// 本程序的版本。
+    Version,
+    /// 1 号进程（init）。
+    InitSystem,
+    /// `用户@主机名` 标题行。渲染原语之一，键是空的。
+    Title,
+    /// 一条横线。渲染原语，长度由渲染器决定。
+    Separator,
+    /// 一个空行。渲染原语。
+    Break,
     /// Rust 工具链。
     Rust,
 }
 
 impl ModuleType {
-    /// 全部模块，顺序即默认显示顺序。
-    pub const ALL: [Self; 10] = [
+    /// 全部模块，`--list-modules` 按这个顺序列出。
+    pub const ALL: [Self; 25] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
+        Self::Bios,
+        Self::Board,
+        Self::Chassis,
         Self::Uptime,
-        Self::Shell,
-        Self::User,
+        Self::Loadavg,
+        Self::Processes,
         Self::Cpu,
         Self::Memory,
+        Self::Swap,
         Self::Disk,
+        Self::User,
+        Self::Shell,
+        Self::Terminal,
+        Self::TerminalSize,
+        Self::Locale,
+        Self::Editor,
+        Self::Version,
+        Self::InitSystem,
+        Self::Title,
+        Self::Separator,
+        Self::Break,
+        Self::Rust,
+    ];
+
+    /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
+    ///
+    /// 选的是 fastfetch 默认视图里我们已经实现了的部分（外加自己的 Rust 模块），
+    /// 目标是一眼看上去就该有的那些。其余模块配一句 `type = "bios"` 就能加进来，
+    /// `--list-modules` 会列全。
+    pub const DEFAULT: [Self; 18] = [
+        Self::Title,
+        Self::Separator,
+        Self::Os,
+        Self::Host,
+        Self::Kernel,
+        Self::Bios,
+        Self::Uptime,
+        Self::Shell,
+        Self::Terminal,
+        Self::Locale,
+        Self::Cpu,
+        Self::Memory,
+        Self::Swap,
+        Self::Disk,
+        Self::Processes,
+        Self::Loadavg,
+        Self::Break,
         Self::Rust,
     ];
 
@@ -152,12 +329,27 @@ impl ModuleType {
             Self::Os => "os",
             Self::Host => "host",
             Self::Kernel => "kernel",
+            Self::Bios => "bios",
+            Self::Board => "board",
+            Self::Chassis => "chassis",
             Self::Uptime => "uptime",
-            Self::Shell => "shell",
-            Self::User => "user",
+            Self::Loadavg => "loadavg",
+            Self::Processes => "processes",
             Self::Cpu => "cpu",
             Self::Memory => "memory",
+            Self::Swap => "swap",
             Self::Disk => "disk",
+            Self::User => "user",
+            Self::Shell => "shell",
+            Self::Terminal => "terminal",
+            Self::TerminalSize => "terminal-size",
+            Self::Locale => "locale",
+            Self::Editor => "editor",
+            Self::Version => "version",
+            Self::InitSystem => "init-system",
+            Self::Title => "title",
+            Self::Separator => "separator",
+            Self::Break => "break",
             Self::Rust => "rust",
         }
     }
