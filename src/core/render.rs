@@ -40,14 +40,18 @@ impl<'a> Report<'a> {
 
 /// 一个发行版 Logo。
 ///
-/// 内容在**编译期**嵌入（阶段 5 用 `include_str!` 填 `lines`），
-/// 运行时不读磁盘——`PLAN.md` 第十条明确排除的事。
+/// 内容在**编译期**用 `include_str!` 嵌进二进制，运行时不读磁盘
+/// ——`PLAN.md` 第十条明确排除的事。
+///
+/// 存整块文本而不是切好的行：`include_str!` 拿到的就是一块文本，
+/// 硬要在编译期切成数组就得把每张图写成 Rust 字符串字面量，
+/// 于是反斜杠要一个个转义。切行是渲染时一次 `lines()` 的事。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Logo {
     /// 匹配用的发行版 id，对应 `/etc/os-release` 的 `ID`。
     pub id: &'static str,
-    /// ASCII 行，已经按换行切好。
-    pub lines: &'static [&'static str],
+    /// ASCII 画面，行以 `\n` 分隔。
+    pub art: &'static str,
 }
 
 /// 渲染失败。

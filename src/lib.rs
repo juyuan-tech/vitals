@@ -17,6 +17,7 @@ pub mod cli;
 pub mod collectors;
 pub mod config;
 pub mod core;
+pub mod render;
 
 pub use crate::collectors::COLLECTORS;
 pub use crate::core::collector::{CollectError, Collector, Context, ModuleName, Platform};

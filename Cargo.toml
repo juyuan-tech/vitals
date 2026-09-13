@@ -15,11 +15,17 @@ name = "vitals"
 path = "src/main.rs"
 
 [dependencies]
+# 颜色只管「描述」，降级交给 anstream：管道的另一端不是终端时它会
+# 自己去把转义码去掉，所以渲染器可以放心总是带色。
+anstream = "1"
+anstyle = "1"
 clap = { version = "4.6", features = ["derive"] }
 # 系统调用：uname（Kernel）与 statvfs（Disk）。
 # 自有代码零 unsafe，全部经它的安全封装；用 uname 而不是读 /proc，
 # 是为了 Kernel 模块不绑死在 Linux 上（uname 在所有 Unix 都有）。
-rustix = { version = "1.1", features = ["fs", "system"] }
+rustix = { version = "1.1", features = ["fs", "system", "termios"] }
+# 对齐必须按显示宽度算，不能按字节数也不能按字符数（PLAN.md §6.1）。
+unicode-width = "0.2"
 # 配置的反序列化。derive 是编译期的，运行时不带 proc-macro。
 serde = { version = "1", features = ["derive"] }
 # 错误类型：编译期展开的 proc-macro，零运行时开销。

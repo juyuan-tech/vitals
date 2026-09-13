@@ -173,7 +173,7 @@ fn unknown_module_is_reported_not_ignored() {
 fn pipeline_collect_then_render() {
     static ARCH: Logo = Logo {
         id: "arch",
-        lines: &["  /\\  ", " /  \\ "],
+        art: "  /\\  \n /  \\ \n",
     };
 
     let outcome = dispatcher().run(&["alpha", "delta"], &context());
