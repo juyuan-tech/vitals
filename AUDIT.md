@@ -139,6 +139,22 @@ vitals: datetime 模块失败：/tmp/sparse9m 超过读取上限（8388608 字�
 `ENETUNREACH`，被当作「这台机器没有出口」＝无数据，不是错误。整个程序**没有任何网络请求**。
 但它是这套「零网络」说法里唯一的例外，所以在 README 的「安全与隐私」里明写了。
 
+### F8 `c_string` 的未检查加法（低危/不可达，已修复）
+
+**证据（模糊测试首次运行即命中）**
+
+```
+thread 'collectors::users::utmp_fuzz_tests::malformed_utmp_records_never_panic' panicked
+at src/collectors/users.rs:218:36:
+attempt to add with overflow
+```
+
+`c_string` 用 `offset + len` 直接算切片末端。真机调用方传的都是常量（`OFF_USER`、32），
+所以**从真实输入不可达**；但 release 下会绕回、debug 下 panic，而两者都不该取决于传进来的
+长度。绕回后 `start > end`，`get` 返回 `None`——不会读到错字段，所以危害止于 panic。
+
+**修复**：`offset.checked_add(len)?`。**验证**：上面那条测试现在通过，并且它会一直守着这行。
+
 ## 已核验的正面结论
 
 这些不是「读起来没问题」，是查过的：
@@ -157,8 +173,10 @@ vitals: datetime 模块失败：/tmp/sparse9m 超过读取上限（8388608 字�
 
 ## 未覆盖（如实列出）
 
-- **没有做模糊测试**：解析器只有手工构造的测试夹具（含一条「垃圾不是时区文件」），
-  没有跑过覆盖率驱动的随机输入。字节级解析器值得后续补一轮 fuzz。
+- **模糊测试是确定性的、不是覆盖率驱动的**：已给两个字节级解析器（TZif、utmp 记录）补上
+  畸形输入测试——随机字节跨所有长度、合法文件逐长度截断、逐位翻转、极端时间戳与极端偏移，
+  外加一份真机 `/usr/share/zoneinfo/UTC`（拿不到就跳过）。首轮就命中了 F8。但这不是
+  libFuzzer/AFL 那种覆盖率引导的 fuzz，EDID、efivar 等其余解析器仍只有手工夹具。
 - **没有第三方静态分析**：只用了 `clippy --all-targets -D warnings`，没跑
   MIRI / cargo-deny / coverity 一类。自有一行 `unsafe` 也没有（`forbid`），MIRI 收益有限。
 - **F4 里「线程起不来」那条降级分支没有自动化测试**：要可靠造出「`spawn` 失败」得

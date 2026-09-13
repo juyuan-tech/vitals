@@ -288,4 +288,62 @@ mod tests {
         assert_eq!(entries[0].value.len(), 19, "实际是 {}", entries[0].value);
         assert_eq!(entries[0].value.as_bytes()[4], b'-');
     }
+
+    /// 畸形字节不 panic：随机输入、逐长度截断、逐位翻转、极端时间戳。
+    ///
+    /// 时区文件本该是系统文件，但 `$TZ`/`$TZDIR` 能把路径指向别处（见 `zone_name_is_safe`
+    /// 与 `read::MAX_READ`），所以「喂进来的字节可以是任意内容」是这条解析器的**真实前提**，
+    /// 不是假想。审计报告里把它列为未覆盖项，这里补上。
+    #[test]
+    fn malformed_tzif_bytes_never_panic() {
+        // 自带 xorshift：只为生成输入，不追求统计质量，也就不需要引第三方依赖。
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+
+        let timestamps = [i64::MIN, -1, 0, 1, 1_000, 1_000_000, i64::MAX];
+
+        // 1) 纯随机字节，长度跨过所有头部字段与块边界。
+        for length in 0..96 {
+            let mut bytes = vec![0u8; length];
+            for byte in bytes.iter_mut() {
+                *byte = (next() & 0xff) as u8;
+            }
+            for timestamp in timestamps {
+                let _ = crate::collectors::tzif::offset_in(&bytes, timestamp);
+            }
+        }
+
+        // 2) 结构合法的文件截断在每一个长度上——最强的畸形输入，因为它前半截是真的。
+        let valid = synthetic();
+        for length in 0..valid.len() {
+            for timestamp in timestamps {
+                let _ = crate::collectors::tzif::offset_in(&valid[..length], timestamp);
+            }
+        }
+
+        // 3) 逐位翻转：头部字段（计数、块大小）被改单个位，最容易触发越界。
+        for index in 0..valid.len() {
+            for bit in 0..8 {
+                let mut mutated = valid.clone();
+                mutated[index] ^= 1 << bit;
+                let _ = crate::collectors::tzif::offset_in(&mutated, 1_000_000);
+            }
+        }
+
+        // 4) 真机上的真实时区文件：既有的合成夹具之外，再喂一份真的。
+        //    拿不到就跳过（测试不该依赖系统里一定有 zoneinfo）。
+        if let Ok(real) = std::fs::read("/usr/share/zoneinfo/UTC") {
+            for timestamp in timestamps {
+                let _ = crate::collectors::tzif::offset_in(&real, timestamp);
+            }
+            for length in 0..real.len() {
+                let _ = crate::collectors::tzif::offset_in(&real[..length], 0);
+            }
+        }
+    }
 }

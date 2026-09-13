@@ -215,7 +215,11 @@ fn parse_record(record: &[u8]) -> Option<Session> {
 /// 字段里不是合法 UTF-8 就返回 `None`，由调用方决定怎么办：用户名那里是「跳过这条」，
 /// 终端名与主机名那里是「当作没有」（它们只是附带信息）。
 fn c_string(record: &[u8], offset: usize, len: usize) -> Option<String> {
-    let field = record.get(offset..offset + len)?;
+    // 用检查过的加法：调用方传的偏移都是常量，但不该依赖这一点——溢出在 release 里会
+    // 绕回、在 debug 里会 panic，两者都不该取决于传进来的长度。绕回后 start > end，
+    // `get` 返回 `None`（不会读到错字段），但 panic 是实打实的。
+    let end = offset.checked_add(len)?;
+    let field = record.get(offset..end)?;
     let end = field
         .iter()
         .position(|byte| *byte == 0)
@@ -760,6 +764,39 @@ mod tests {
         if entries.len() > 1 {
             for (index, info) in entries.iter().enumerate() {
                 assert_eq!(info.key, format!("Users {}", index + 1));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod utmp_fuzz_tests {
+    use super::*;
+
+    /// 畸形 utmp 记录不 panic。`utmp` 是多个进程共同追加的文件，里面有陈旧记录、
+    /// 有断电留下的半个记录——「输入可以是任意字节」是这条解析器的真实前提。
+    #[test]
+    fn malformed_utmp_records_never_panic() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+
+        for length in 0..(RECORD + 8) {
+            let mut record = vec![0u8; length];
+            for byte in record.iter_mut() {
+                *byte = (next() & 0xff) as u8;
+            }
+
+            let _ = parse_record(&record);
+
+            // `c_string` 的偏移是常量，但把极端值也喂进去：一旦内部用 `offset + len`
+            // 而不是检查过的加法，这里就会在 debug 下溢出 panic——那是这次审计要问的问题。
+            for offset in [0, 1, 8, RECORD / 2, RECORD - 1, usize::MAX - 30, usize::MAX] {
+                let _ = c_string(&record, offset, 32);
             }
         }
     }
