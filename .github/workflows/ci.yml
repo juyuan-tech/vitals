@@ -35,3 +35,18 @@ jobs:
       # 现在用 cargo test：零测试用例也能正常通过。
       - name: 测试
         run: cargo test --all-targets
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.85.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      # `Cargo.toml` 里的 `rust-version = "1.85"` 是给用户看的承诺。
+      # 上面那个作业跑的是 stable：哪天顺手用了更新的 API，它照样绿，
+      # 而用户可以编不过。这里真按 1.85 编一遍才叫验证过。
+      - name: MSRV 检查（1.85）
+        run: cargo check --all-targets
