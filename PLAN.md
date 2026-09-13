@@ -426,6 +426,24 @@ Codec (Decoder): MJPEG, H.264, HEVC / H.265, VP9, AV1
 **明确不追平的**：只有 Sixel/Kitty/Chafa 这类图像协议（要动终端图形栈，收益与风险
 不成比例）。`--watch` 动态刷新与天气/公网 IP 都在清单里，不算不追平。
 
+### 5.7 逐模块查过的「零子进程 + 零依赖 + 不用 unsafe」做不到哪些（附证据）
+
+每条都是在本机翻过数据源之后写下的，不是凭印象。它们的共同形状是：**fastfetch 那部分
+能力来自内核 ioctl、D-Bus 或 dlopen 的动态库**，而这三样在「不用 unsafe、不加依赖、
+不起子进程」的约束下都够不着。
+
+| 模块 | 拿不到的 | 为什么 | 我们能给的 |
+| --- | --- | --- | --- |
+| `bluetooth` / `bluetoothradio` | 设备名、电量、HCI 版本（`Bluetooth 5.3`） | `/sys/class/bluetooth/hci0/` 只有 `device/power/reset/rfkill0`，连 HCI 版本都不在 sysfs；`hci0:512` 子目录只说明「有 1 条连接」。唯一路径是 bluez 的 D-Bus | 连接**条数**（`/sys/class/bluetooth/hci0*` 里非 hci0 的条目）；或者干脆不做 |
+| `camera` | 分辨率与像素格式（`- sRGB (2592x1944 px)`） | 要 V4L2 的 `VIDIOC_ENUM_FMT`/`VIDIOC_G_FMT` ioctl | 设备名（与 fastfetch 行首逐字相同，按名字去重后） |
+| `opengl` / `vulkan` / `opencl` / `codec` | 版本与支持的解码格式 | 要 `dlopen` libGL/libvulkan/libva 再问驱动 | 无（不做） |
+| `public-ip` / `weather` | 全部 | 要 HTTPS 客户端（标准库没有 TLS）。明文 HTTP 的接口存在，但把用户 IP 发出去还得明文传输，不值当 | 无（要做得单独讨论加不加 feature） |
+| `physical-memory` | 内存条型号/容量 | `/sys/firmware/dmi/entries/17-*/raw` 是 `-r-------- root root`（连 type 0 也一样）。fastfetch 在本机同样什么都不输出 | 有权限时（root）才有数据 |
+| `media` / `player` | 正在播的歌与播放器 | 要 MPRIS（D-Bus 协议），自己实现一遍总线协议量级在几百行 | 无（可另开一批做） |
+
+`zpool` 是另一回事：数据源（`/proc/spl/kstat/zfs/<池>/`）本身可读，但**本机没装 ZFS**，
+写了也验证不了。按「宁可报告做不到，也不许猜着写」的规矩压后，等有 ZFS 的机器再说。
+
 ---
 
 ## 六、渲染设计
