@@ -41,6 +41,7 @@ pub mod dns;
 pub mod editor;
 pub mod env;
 pub mod font;
+pub mod gamepad;
 pub mod gpu;
 pub mod host;
 pub mod icons;
@@ -56,6 +57,7 @@ pub mod local_ip;
 pub mod locale;
 pub mod meminfo;
 pub mod memory;
+pub mod mouse;
 pub mod os;
 pub mod os_release;
 pub mod packages;
@@ -152,4 +154,6 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &wifi::Wifi,
     &camera::Camera,
     &keyboard::Keyboard,
+    &mouse::Mouse,
+    &gamepad::Gamepad,
 ];

@@ -13,8 +13,8 @@
 //! 另外两种行不是「键: 值」：
 //!
 //! - **空键**（`title`）只印值，不补键、不写分隔符——它就是标题。
-//! - **`separator`** 印一条横线，长度取决于其它行有多宽，所以只有渲染器知道该多长：
-//!   采集器发一个空条目当标记，线在 `render` 里才铺出来。
+//! - **`separator`** 印一条横线，**长度跟标题的值一样宽**（fastfetch 的口径），
+//!   所以只有渲染器知道该多长：采集器发一个空条目当标记，线在 `render` 里才铺出来。
 
 use std::io::{self, Write};
 
@@ -41,6 +41,9 @@ const RULE: char = '─';
 
 /// 只发标记、由渲染器铺线的模块。
 const RULE_MODULE: &str = "separator";
+
+/// 标题模块。分隔线跟它的值一样宽。
+const TITLE_MODULE: &str = "title";
 
 /// 文本渲染器。
 #[derive(Debug)]
@@ -89,10 +92,22 @@ impl Renderer for TextRenderer {
             .max()
             .unwrap_or(0);
 
+        // 线有多长：**跟标题一样宽**，不是跟信息列一样宽。fastfetch 就是这个口径——
+        // 真机对比，标题 `gxyarch@MyArch` 是 14 列，它那条分隔线正好 14 个横线；
+        // 我们先前按最宽的信息行铺，铺出 81 个，比标题长出一大截。
+        // 没有标题（只选了别的模块）才退回信息列宽度。
+        let rule_width = report
+            .entries
+            .iter()
+            .find(|info| info.module == TITLE_MODULE)
+            .map(|info| display_width(&info.value))
+            .filter(|width| *width > 0)
+            .unwrap_or(info_width);
+
         // 线有多长，现在才量得出来。
         for line in &mut lines {
             if line.rule {
-                line.value = RULE.to_string().repeat(info_width);
+                line.value = RULE.to_string().repeat(rule_width);
             }
         }
 
@@ -153,8 +168,6 @@ struct Line {
     /// 键，还没补空格。**空键表示这不是「键: 值」行**：
     /// 标题就是空的键，空行与分隔线则是空键加空值。
     key: String,
-    /// 键左边要补几格，才能和所有键右对齐。
-    padding: usize,
     /// 值。分隔线的值在 `render` 里才填上，因为那时才知道该铺多长。
     value: String,
     /// 是不是分隔线。
@@ -171,35 +184,23 @@ impl Line {
             return display_width(&self.value);
         }
 
-        self.padding + display_width(&self.key) + SEPARATOR.len() + display_width(&self.value)
+        display_width(&self.key) + SEPARATOR.len() + display_width(&self.value)
     }
 }
 
-/// 把所有键按最宽的那个右对齐。
+/// 把所有键**左对齐**。
+///
+/// 键从同一列开始，冒号因此参差——这是 fastfetch 的口径（实测它的键全部从第 42 列
+/// 开始，冒号列 44/45/46/48/56…各不相同）。一开始我们做成右对齐（冒号一列），
+/// 真机并排比过之后改成它这样：键长短不一时，右对齐会把标题和第一列的空白一起推远，
+/// 看起来比它「散」。
 fn layout(entries: &[Info]) -> Vec<Line> {
-    // 无键行不参与键对齐：拿一个空键去和别人比宽窄，只会把最宽键的宽度算对，
-    // 却让自己多出一段没意义的前置空格。
-    let widest = entries
-        .iter()
-        .filter(|info| !info.key.is_empty())
-        .map(|info| display_width(&info.key))
-        .max()
-        .unwrap_or(0);
-
     entries
         .iter()
-        .map(|info| {
-            let keyless = info.key.is_empty();
-            Line {
-                key: info.key.clone(),
-                padding: if keyless {
-                    0
-                } else {
-                    widest.saturating_sub(display_width(&info.key))
-                },
-                value: info.value.clone(),
-                rule: info.module == RULE_MODULE,
-            }
+        .map(|info| Line {
+            key: info.key.clone(),
+            value: info.value.clone(),
+            rule: info.module == RULE_MODULE,
         })
         .collect()
 }
@@ -262,7 +263,6 @@ fn write_row(out: &mut dyn Write, line: &Line, theme: Theme) -> io::Result<()> {
         );
     }
 
-    write_spaces(out, line.padding)?;
     write!(
         out,
         "{}{}{}",
@@ -354,16 +354,27 @@ mod tests {
         let text = render_to_string(&TextRenderer::with_columns(Theme::default(), 80), &report);
         let text = visible(&text);
 
-        let columns: Vec<usize> = text
-            .lines()
-            .filter_map(|line| line.find(": ").map(|at| line[..at].chars().count()))
+        // 键是**左对齐**的：`键: ` 这个串在哪一列出现，就是这一行的键起始列，
+        // 必须处处相同。（右对齐时这个数会随键长变化——那正是先前出问题的地方。）
+        let starts: Vec<usize> = ["OS", "Host", "Kernel", "BIOS (UEFI)"]
+            .iter()
+            .map(|key| {
+                let needle = format!("{key}: ");
+                let line = text
+                    .lines()
+                    .find(|line| line.contains(&needle))
+                    .unwrap_or_else(|| panic!("没有这一行：{key}\n{text}"));
+
+                line.find(&needle).unwrap()
+            })
             .collect();
 
-        assert!(columns.len() >= 4, "该有四行带键的行：\n{text}");
         assert!(
-            columns.windows(2).all(|pair| pair[0] == pair[1]),
-            "键该从同一列开始，实际是 {columns:?}：\n{text}"
+            starts.windows(2).all(|pair| pair[0] == pair[1]),
+            "键该从同一列开始，实际是 {starts:?}：\n{text}"
         );
+        // 而且那一列得在画面之后（画面最宽 3 列 + 间隔 2 列）——上下留白处也要让开。
+        assert_eq!(starts[0], 5, "键该从画面右边开始：\n{text}");
     }
 
     #[test]

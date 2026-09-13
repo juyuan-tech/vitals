@@ -210,7 +210,7 @@ fn json_still_reports_errors_on_stderr() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_title_has_no_key_and_the_rule_matches_the_widest_line() {
+fn the_title_has_no_key_and_the_rule_matches_the_title() {
     let text = stdout(&vitals(&[
         "--module",
         "title,separator,os",
@@ -221,12 +221,9 @@ fn the_title_has_no_key_and_the_rule_matches_the_widest_line() {
 
     assert_eq!(lines.len(), 3, "{text}");
     assert!(!lines[0].contains(": "), "标题不该印成 `键: 值`：{text}");
-    // 横线的长度 = 其它行里最宽的那条。
-    let widest = lines[0]
-        .chars()
-        .count()
-        .max("OS: Arch Linux".chars().count());
-    assert_eq!(lines[1], "─".repeat(widest), "横线该跟着最宽的那行");
+    // 横线的长度 = **标题**的宽度（fastfetch 的口径），不是信息列里最宽的那行。
+    let title_width = lines[0].chars().count();
+    assert_eq!(lines[1], "─".repeat(title_width), "横线该跟着标题");
     assert_eq!(lines[2], "OS: Arch Linux");
 }
 

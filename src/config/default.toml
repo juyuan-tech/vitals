@@ -3,9 +3,15 @@
 # 由 `vitals --gen-config` 打印。这个文件**整体替换**内置默认：写了 modules，
 # 内置列表就不再生效，所以想少显示几个模块，得把要留的列全。
 #
-# 下面这份就是内置默认视图：顺序照着 fastfetch 2.68.1 的默认视图排
-# （OS → Host → Kernel → … → Locale），只多三样自己的东西：
-# processes、loadavg（各一行，一眼看到机器忙不忙）和 rust（本程序自己的版本）。
+# 下面这份就是内置默认视图，与 fastfetch 2.68.1 **无参运行**时打印的逐项对得上
+# （真机两边并排比过）：OS → Host → Kernel → Uptime → Packages → Shell → Display →
+# WM → Cursor → Terminal → Terminal Font → CPU → GPU → Memory → Swap → Disk →
+# Local IP → Battery → Locale。
+#
+# 早先这里还带 bios/board/chassis/bootmgr、wmtheme/theme/icons/font、
+# processes/loadavg/power-adapter/rust——那是照 fastfetch **文档**里的默认结构写的，
+# 而它实际无参跑起来并不印这些。留着只是把该一眼看完的东西淹掉，所以裁掉了；
+# 想显示它们，`--module` 点名或者在这个文件里列一下就行。
 
 config_version = 1
 
@@ -48,18 +54,6 @@ type = "host"
 type = "kernel"
 
 [[modules]]
-type = "bios"
-
-[[modules]]
-type = "board"
-
-[[modules]]
-type = "chassis"
-
-[[modules]]
-type = "bootmgr"
-
-[[modules]]
 type = "uptime"
 
 [[modules]]
@@ -76,18 +70,6 @@ type = "de"
 
 [[modules]]
 type = "wm"
-
-[[modules]]
-type = "wmtheme"
-
-[[modules]]
-type = "theme"
-
-[[modules]]
-type = "icons"
-
-[[modules]]
-type = "font"
 
 [[modules]]
 type = "cursor"
@@ -117,22 +99,7 @@ type = "disk"
 type = "local-ip"
 
 [[modules]]
-type = "processes"
-
-[[modules]]
-type = "loadavg"
-
-[[modules]]
 type = "battery"
 
 [[modules]]
-type = "power-adapter"
-
-[[modules]]
 type = "locale"
-
-[[modules]]
-type = "break"
-
-[[modules]]
-type = "rust"

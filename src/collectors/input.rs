@@ -200,6 +200,22 @@ pub fn is_pointer(device: &Device) -> bool {
         || device.keys.has_any_in(BTN_TOOL.0, BTN_TOOL.1)
 }
 
+/// 是不是一个手柄。
+///
+/// 判据是 `Handlers` 里的 `js*`：内核给每个注册成 joystick 接口的设备开
+/// `/dev/input/jsN`，手柄走的就是这条路。**不看 `EV_ABS` 这类能力位**——
+/// 触摸屏与触摸板也有绝对轴，拿它判会把触摸板当成手柄。
+pub fn is_gamepad(device: &Device) -> bool {
+    device.handlers.iter().any(|handler| is_joystick(handler))
+}
+
+/// `js0`、`js12` 这种 handler 名。
+fn is_joystick(handler: &str) -> bool {
+    handler
+        .strip_prefix("js")
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
 /// 从 `/proc/bus/input/devices` 读全部设备。
 pub fn devices() -> Result<Vec<Device>, crate::core::collector::CollectError> {
     Ok(read::text("/proc/bus/input/devices")?
@@ -289,6 +305,31 @@ B: MSC=10
         // 是真键盘；真正的鼠标按键是 `BTN_LEFT`（0x110），它并没有。
         assert!(is_keyboard(&devices[2]), "无线接收器里那份键盘要算键盘");
         assert!(!is_pointer(&devices[2]), "它没有 BTN_LEFT，不算指针");
+    }
+
+    #[test]
+    fn joystick_handlers_are_recognised() {
+        assert!(is_joystick("js0"));
+        assert!(is_joystick("js12"));
+        assert!(!is_joystick("js"), "光是 js 不算");
+        assert!(!is_joystick("jsx"));
+        assert!(!is_joystick("event3"));
+    }
+
+    #[test]
+    fn a_gamepad_is_found_by_its_joystick_handler() {
+        // 本机没有手柄，所以这段设备名是**合成的**：这条测的是判据本身，
+        // 不是某一台机器的真实数据（真机那一半见 `gamepad.rs` 的说明）。
+        let gamepad = Device {
+            name: "Xbox Wireless Controller".to_owned(),
+            handlers: vec!["js0".to_owned(), "event12".to_owned()],
+            ev: (1 << EV_KEY) | (1 << EV_ABS),
+            keys: Bitmap::default(),
+        };
+        assert!(is_gamepad(&gamepad));
+
+        // 真键盘没有 `js*`，不能被当成手柄；触摸板的绝对轴也不行。
+        assert!(!is_gamepad(&parse(REAL)[1]));
     }
 
     #[test]

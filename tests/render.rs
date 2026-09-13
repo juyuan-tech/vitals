@@ -76,10 +76,11 @@ fn logo_on_the_left_information_on_the_right() {
         &entries(),
     );
 
-    // 键按最宽的 "Kernel"(6) 右对齐；画面 2 列 + 空隙 2 列之后才是信息。
+    // 键左对齐（fastfetch 的口径）：都从画面 2 列 + 空隙 2 列之后的同一列开始，
+    // 冒号因此参差——`OS:` 在 4，`Kernel:` 也在 4。
     assert_eq!(
         text,
-        "##      OS: Arch Linux\n\
+        "##  OS: Arch Linux\n\
          ##  Kernel: 7.2.4-arch1-2\n"
     );
 }
@@ -88,7 +89,7 @@ fn logo_on_the_left_information_on_the_right() {
 fn without_a_logo_the_information_keeps_its_own_alignment() {
     let text = render(&TextRenderer::with_columns(plain(), 40), None, &entries());
 
-    assert_eq!(text, "    OS: Arch Linux\nKernel: 7.2.4-arch1-2\n");
+    assert_eq!(text, "OS: Arch Linux\nKernel: 7.2.4-arch1-2\n");
 }
 
 #[test]
@@ -137,13 +138,13 @@ fn the_logo_is_centred_vertically() {
 
     assert_eq!(lines.len(), 4, "信息有几行就出几行");
     assert_eq!(
-        lines[0], "        OS: v",
-        "（4-2)/2 = 1：第一行留给画面，但信息列仍要空出画面那一列（2 + 间隔 2）"
+        lines[0], "    OS: v",
+        "（4-2)/2 = 1：第一行留给画面，但信息列仍要空出画面那一列（2 + 间隔 2）；键左对齐"
     );
     assert!(lines[1].starts_with("##"), "画面从第二行开始：{lines:?}");
     assert!(lines[2].starts_with("##"));
     assert_eq!(
-        lines[3], "       CPU: v",
+        lines[3], "    CPU: v",
         "画面比信息短，最后一行只剩信息——依然要在同一列上"
     );
 }
@@ -270,7 +271,7 @@ fn a_keyless_line_does_not_widen_the_key_column() {
 }
 
 #[test]
-fn the_separator_is_as_wide_as_the_widest_line() {
+fn the_separator_is_as_wide_as_the_title() {
     let entries = vec![
         Info::new("title", "", "gxyarch@MyArch"),
         Info::new("separator", "", ""),
@@ -281,11 +282,15 @@ fn the_separator_is_as_wide_as_the_widest_line() {
     let output = render(&TextRenderer::with_columns(plain(), 80), None, &entries);
     let lines: Vec<&str> = output.lines().collect();
 
-    // 最宽的一行是 `Kernel: 7.2.4-arch1-2`（21 列），横线就跟它一样长。
-    assert_eq!(lines[1].chars().count(), 21);
-    assert_eq!(lines[1], "─".repeat(21));
+    // 标题 `gxyarch@MyArch` 是 14 列，横线就跟它一样长（fastfetch 的口径）。
+    // 信息列里有更宽的 `Kernel: 7.2.4-arch1-2`（21 列），但横线**不**跟着它。
+    assert_eq!(lines[1].chars().count(), 14);
+    assert_eq!(lines[1], "─".repeat(14));
     assert_eq!(lines[0], "gxyarch@MyArch");
-    assert_eq!(lines[2], "    OS: Arch Linux", "键右对齐到 Kernel 的宽度");
+    assert_eq!(
+        lines[2], "OS: Arch Linux",
+        "键左对齐：从画面之后的同一列开始"
+    );
 }
 
 #[test]
@@ -307,8 +312,8 @@ fn a_break_is_an_empty_line() {
 
     let output = render(&TextRenderer::with_columns(plain(), 80), None, &entries);
 
-    // 键右对齐：`Rust` 比 `OS` 宽两格，所以 OS 前面补两个空格。
-    assert_eq!(output, "  OS: Arch Linux\n\nRust: stable\n");
+    // 键左对齐：`Rust` 比 `OS` 宽不影响 OS 的位置，两者都从第 0 列开始。
+    assert_eq!(output, "OS: Arch Linux\n\nRust: stable\n");
 }
 
 #[test]

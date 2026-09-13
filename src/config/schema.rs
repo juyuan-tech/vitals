@@ -326,11 +326,15 @@ pub enum ModuleType {
     Camera,
     /// 键盘。
     Keyboard,
+    /// 指针设备（鼠标、触摸板）。
+    Mouse,
+    /// 游戏手柄。
+    Gamepad,
 }
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 53] = [
+    pub const ALL: [Self; 55] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -384,6 +388,8 @@ impl ModuleType {
         Self::Wifi,
         Self::Camera,
         Self::Keyboard,
+        Self::Mouse,
+        Self::Gamepad,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
@@ -397,26 +403,18 @@ impl ModuleType {
     /// 后来补进来的 `bootmgr` 与 `local-ip` 也在 fastfetch 的默认视图里：
     /// 前者紧跟 `chassis`，后者在 `disk` 之后、`battery` 之前。`users` 与
     /// `physical-disk` 不进默认视图（fastfetch 默认也不显示它们）。
-    pub const DEFAULT: [Self; 35] = [
+    pub const DEFAULT: [Self; 22] = [
         Self::Title,
         Self::Separator,
         Self::Os,
         Self::Host,
         Self::Kernel,
-        Self::Bios,
-        Self::Board,
-        Self::Chassis,
-        Self::Bootmgr,
         Self::Uptime,
         Self::Packages,
         Self::Shell,
         Self::Display,
         Self::De,
         Self::Wm,
-        Self::WmTheme,
-        Self::Theme,
-        Self::Icons,
-        Self::Font,
         Self::Cursor,
         Self::Terminal,
         Self::TerminalFont,
@@ -426,13 +424,8 @@ impl ModuleType {
         Self::Swap,
         Self::Disk,
         Self::LocalIp,
-        Self::Processes,
-        Self::Loadavg,
         Self::Battery,
-        Self::PowerAdapter,
         Self::Locale,
-        Self::Break,
-        Self::Rust,
     ];
 
     /// 模块名。
@@ -496,6 +489,8 @@ impl ModuleType {
             Self::Wifi => "wifi",
             Self::Camera => "camera",
             Self::Keyboard => "keyboard",
+            Self::Mouse => "mouse",
+            Self::Gamepad => "gamepad",
         }
     }
 }
