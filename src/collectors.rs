@@ -23,6 +23,7 @@
 pub mod accounts;
 pub mod battery;
 pub mod bios;
+pub mod blockdev;
 pub mod board;
 pub mod bootmgr;
 pub mod brightness;

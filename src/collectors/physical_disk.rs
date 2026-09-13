@@ -28,6 +28,7 @@
 //! 当成 `Virtual` 一起列出来（源码里的判据只有 `device` 链接），这一条是我们
 //! 自己的取舍——本机没有这两种设备，无法用实机输出对照。
 
+use crate::collectors::blockdev;
 use std::path::Path;
 
 use crate::collectors::{read, units};
@@ -157,7 +158,7 @@ fn read_disk(device: &str) -> Result<Option<Disk>, CollectError> {
         return Ok(None);
     }
 
-    let physical = Path::new(&dir).join("device").is_dir();
+    let physical = blockdev::is_physical(Path::new(&dir))?;
     let removable = read::text(&format!("{dir}/removable"))?
         .as_deref()
         .and_then(parse_flag);
@@ -169,7 +170,7 @@ fn read_disk(device: &str) -> Result<Option<Disk>, CollectError> {
         let rotational = read::text(&format!("{dir}/queue/rotational"))?;
 
         (
-            display_name(device, vendor.as_deref(), model.as_deref()),
+            blockdev::display_name(device, vendor.as_deref(), model.as_deref()),
             rotational.as_deref().and_then(classify),
             interconnect(device, &dir)?,
         )
@@ -189,33 +190,6 @@ fn read_disk(device: &str) -> Result<Option<Disk>, CollectError> {
         removable,
         interconnect,
     }))
-}
-
-/// 显示名：`厂商 型号`，都读不到就是设备名。
-///
-/// 显示名：`厂商 型号`，都读不到就是设备名。
-///
-/// **与 upstream 逐字一致**（`physicaldisk_linux.c`）：`vendor` 非空就拼上它加一个空格，
-/// 再拼 `model`，然后去掉尾部空白；两边都空才退回设备名。这里**没有**做「厂商已经在
-/// 型号里就不重复」这种聪明处理——本机那块 NVMe 盘**根本没有** `vendor` 文件
-/// （`SAMSUNG` 是型号 `SAMSUNG MZVL21T0HCLR-00BH1` 自带的前缀），所以那条差别
-/// 在这台机器上看不出来；看不出来就照抄 upstream，不多想。
-fn display_name(device: &str, vendor: Option<&str>, model: Option<&str>) -> String {
-    let vendor = vendor.map(str::trim).filter(|value| !value.is_empty());
-    let model = model.map(str::trim).filter(|value| !value.is_empty());
-
-    let name = match (vendor, model) {
-        (Some(vendor), Some(model)) => format!("{vendor} {model}"),
-        (Some(vendor), None) => vendor.to_owned(),
-        (None, Some(model)) => model.to_owned(),
-        (None, None) => device.to_owned(),
-    };
-
-    if name.is_empty() {
-        device.to_owned()
-    } else {
-        name
-    }
 }
 
 /// `queue/rotational` → 固态还是机械。
@@ -291,17 +265,20 @@ mod tests {
     fn names_the_disk_the_way_upstream_does() {
         // 本机三张盘的字段原文（`vendor`/`model` 里的尾随空白已经由 read::text 去掉）。
         assert_eq!(
-            display_name("sda", Some("Kingston"), Some("DataTraveler 3.0")),
+            blockdev::display_name("sda", Some("Kingston"), Some("DataTraveler 3.0")),
             "Kingston DataTraveler 3.0"
         );
         // NVMe 没有 vendor 文件，型号里自带厂商名。
         assert_eq!(
-            display_name("nvme0n1", None, Some("SAMSUNG MZVL21T0HCLR-00BH1")),
+            blockdev::display_name("nvme0n1", None, Some("SAMSUNG MZVL21T0HCLR-00BH1")),
             "SAMSUNG MZVL21T0HCLR-00BH1"
         );
         // 虚拟盘没有型号，退回设备名。
-        assert_eq!(display_name("zram0", None, None), "zram0");
-        assert_eq!(display_name("zram0", Some("  "), Some("")), "zram0");
+        assert_eq!(blockdev::display_name("zram0", None, None), "zram0");
+        assert_eq!(
+            blockdev::display_name("zram0", Some("  "), Some("")),
+            "zram0"
+        );
     }
 
     #[test]
@@ -310,15 +287,15 @@ mod tests {
         // 所以型号里已经带着厂商时会出现两遍——这看着蠢，但它与 fastfetch 一致，
         // 而本机的 NVMe 盘没有 vendor 文件，压根走不到这一支。
         assert_eq!(
-            display_name("nvme0n1", Some("SAMSUNG"), Some("SAMSUNG MZVL21T0HCLR")),
+            blockdev::display_name("nvme0n1", Some("SAMSUNG"), Some("SAMSUNG MZVL21T0HCLR")),
             "SAMSUNG SAMSUNG MZVL21T0HCLR"
         );
         assert_eq!(
-            display_name("sdb", Some("WDC"), Some("WD20EZBX-00A")),
+            blockdev::display_name("sdb", Some("WDC"), Some("WD20EZBX-00A")),
             "WDC WD20EZBX-00A"
         );
         // 只有厂商、没有型号。
-        assert_eq!(display_name("sdc", Some("WDC"), None), "WDC");
+        assert_eq!(blockdev::display_name("sdc", Some("WDC"), None), "WDC");
     }
 
     #[test]

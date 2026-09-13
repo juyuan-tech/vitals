@@ -31,9 +31,9 @@
 //! 都空则退回设备名。upstream 自己在 `physicaldisk_linux.c` 与 `diskio_linux.c`
 //! 里也是各写一遍，所以这里没有抽公共件——但两处将来必须一起改。
 
-use std::path::Path;
 use std::time::{Duration, Instant};
 
+use crate::collectors::blockdev;
 use crate::collectors::{read, units};
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
@@ -180,7 +180,7 @@ fn scan() -> Result<Option<Vec<Disk>>, CollectError> {
         }
 
         let dir = entry.path();
-        if !is_physical(&dir)? {
+        if !blockdev::is_physical(&dir)? {
             continue; // 虚拟盘：upstream 在这里 return "virtual device"
         }
 
@@ -194,7 +194,7 @@ fn scan() -> Result<Option<Vec<Disk>>, CollectError> {
         };
 
         disks.push(Disk {
-            name: display_name(&dir, &dev)?,
+            name: blockdev::name_from_sysfs(&dir, &dev)?,
             dev,
             read_ios,
             read_sectors,
@@ -204,52 +204,6 @@ fn scan() -> Result<Option<Vec<Disk>>, CollectError> {
     }
 
     Ok(Some(disks))
-}
-
-/// 这张盘有没有 `device` 链接（upstream 的 `openat(dfd, "device", ...)`）。
-///
-/// 三种结局分得很清：
-///
-/// - 链接在 → 物理盘
-/// - 链接不在 → `Ok(false)`，跳过这张盘，**这不是错误**
-/// - 看不了（权限之类）→ `Err`，不能装作它不存在
-fn is_physical(dir: &Path) -> Result<bool, CollectError> {
-    match std::fs::metadata(dir.join("device")) {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(source) => Err(CollectError::caused_by(
-            format!("查看 {} 失败", dir.join("device").display()),
-            source,
-        )),
-    }
-}
-
-/// 盘名：`vendor`（非空时加一个空格）+ `model`，都空则退回设备名。
-///
-/// 两个文件都在 **`device/` 下面**（`/sys/block/sda/device/vendor`），
-/// 不在 `/sys/block/sda/vendor`——本机实测：`/sys/block/nvme0n1/` 这一层
-/// 既没有 `vendor` 也没有 `model`，而 `device/` 下有 `model`
-/// （`SAMSUNG MZVL21T0HCLR-00BH1`，带一长串尾随空白）。`read::text` 会去掉
-/// 首尾空白，所以型号不用再 trim。
-///
-/// 与 `physical_disk.rs` 里那条规则逐字一致（upstream 也是两份拷贝）。
-fn display_name(dir: &Path, dev: &str) -> Result<String, CollectError> {
-    let read_field = |field: &str| {
-        let path = dir.join("device").join(field);
-        read::text(&path.to_string_lossy())
-    };
-
-    let vendor = read_field("vendor")?.unwrap_or_default();
-    let model = read_field("model")?.unwrap_or_default();
-
-    let name = match (vendor.trim(), model.trim()) {
-        ("", "") => dev.to_owned(),
-        ("", model) => model.to_owned(),
-        (vendor, "") => vendor.to_owned(),
-        (vendor, model) => format!("{vendor} {model}"),
-    };
-
-    Ok(name)
 }
 
 /// 找出两次采样之间盘集合的差异，返回一句人话。
@@ -328,6 +282,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use std::path::Path;
 
     /// 本机 `/sys/block/nvme0n1/stat` 的原文（一次真实读取）。
     const NVME_STAT: &str = "  327968    17681 28335708   175807  3239286    80872 150141953  9344391        0  1403432 10062508   109487        0 675073032   293372   115182   248936";
@@ -402,7 +357,7 @@ mod tests {
         // 别的机器上未必有这块盘，所以先看在不在。
         let dir = PathBuf::from("/sys/block/nvme0n1");
         if dir.join("device").join("model").exists() {
-            let name = display_name(&dir, "nvme0n1").unwrap();
+            let name = blockdev::name_from_sysfs(&dir, "nvme0n1").unwrap();
             // 有 vendor 就拼在前面；没有就是纯型号。两种都算对。
             assert!(
                 name == "SAMSUNG MZVL21T0HCLR-00BH1" || name.ends_with("MZVL21T0HCLR-00BH1"),
@@ -414,7 +369,7 @@ mod tests {
 
         // 虚拟盘两个文件都没有，退回设备名。
         let zram = PathBuf::from("/sys/block/zram0");
-        assert_eq!(display_name(&zram, "zram0").unwrap(), "zram0");
+        assert_eq!(blockdev::name_from_sysfs(&zram, "zram0").unwrap(), "zram0");
     }
 
     #[test]
@@ -422,17 +377,17 @@ mod tests {
         // 这条就是 upstream 的 "virtual device" 判据。
         // 本机 /sys/block/zram0/device 不存在（虚拟盘从来不挂 device），
         // /sys/block/nvme0n1/device 是指向 PCI 设备的符号链接。
-        assert!(!is_physical(Path::new("/sys/block/zram0")).unwrap());
+        assert!(!blockdev::is_physical(Path::new("/sys/block/zram0")).unwrap());
 
         // 别的机器上未必有 nvme0n1，所以先看路径在不在再断言——
         // 这个测试在没有它的机器上也要绿。
         let nvme = Path::new("/sys/block/nvme0n1");
         if nvme.join("device").exists() {
-            assert!(is_physical(nvme).unwrap());
+            assert!(blockdev::is_physical(nvme).unwrap());
         }
 
         // 目录在、但没有 device 子项 → 假。
-        assert!(!is_physical(Path::new("/sys/block")).unwrap());
+        assert!(!blockdev::is_physical(Path::new("/sys/block")).unwrap());
     }
 
     #[test]
