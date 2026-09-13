@@ -278,9 +278,12 @@ fn layout(entries: &[Info]) -> Vec<Line> {
                 Kind::Info
             };
 
+            // 唯一一处 `Info` → 行的转换：外部字符串里的控制字符在这里去掉。
+            // 放在这里而不是写入时，是因为**宽度也要按去掉后的文本算**，
+            // 否则补空格会算错，版式跟着歪。
             vec![Line {
-                key: info.key.clone(),
-                value: info.value.clone(),
+                key: crate::render::sanitize::sanitize(&info.key).into_owned(),
+                value: crate::render::sanitize::sanitize(&info.value).into_owned(),
                 kind,
             }]
         })

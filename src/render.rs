@@ -5,5 +5,6 @@
 
 pub mod json;
 pub mod logo;
+pub mod sanitize;
 pub mod text;
 pub mod theme;

@@ -220,6 +220,9 @@ fn explain(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcom
                 }
             };
 
+        // 理由里可能有路径（`跳过` 就是一条路径），同样过一遍清洗再打印。
+        let detail = vitals_rs::render::sanitize::sanitize(&detail);
+
         println!("{name:width$}  {state}  {detail}");
     }
 }
@@ -254,7 +257,14 @@ fn print_sources(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &Run
         if paths.is_empty() {
             println!("{name:width$}  没有读文件  （数据来自环境变量或系统调用）");
         } else {
-            println!("{name:width$}  {}", paths.join(", "));
+            // 路径是拼出来的（`$HOME`、`$TZ`、`$XDG_CONFIG_HOME` 都参与），
+            // 所以它跟模块的值一样是外部字符串，打印前必须过一遍清洗。
+            let listed: Vec<_> = paths
+                .iter()
+                .map(|path| vitals_rs::render::sanitize::sanitize(path).into_owned())
+                .collect();
+
+            println!("{name:width$}  {}", listed.join(", "));
         }
     }
 }

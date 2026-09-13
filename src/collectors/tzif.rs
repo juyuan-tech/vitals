@@ -174,3 +174,50 @@ mod tests {
         assert_eq!(offset_in(&[0; TZIF_HEADER], 0), None, "没有 TZif 魔数");
     }
 }
+
+/// 时区名能不能安全地拼进 zoneinfo 路径。
+///
+/// 只有**相对**名字要过这一关：它会被拼到 `/usr/share/zoneinfo/` 后面。名字里出现
+/// `..`、根目录这类成分时一律不接受——不该让一个环境变量（`$TZ`、`$TZDIR`）把读取带到
+/// zoneinfo 目录外面去。绝对路径按 POSIX 的规矩照收（`TZ=/etc/localtime` 是合法用法），
+/// 那种情况下由 [`crate::collectors::read`] 的读取上限兜住内存。
+///
+/// 这条规则原本只写在 `users` 里，`date_time` 那一侧漏了——实测
+/// `TZ=../../../../etc/hostname` 真的会被读。现在两边共用这一份。
+pub(crate) fn zone_name_is_safe(name: &str) -> bool {
+    use std::path::{Component, Path};
+
+    let mut has_file_part = false;
+    let mut goes_up = false;
+
+    for part in Path::new(name).components() {
+        match part {
+            Component::Normal(_) => has_file_part = true,
+            Component::ParentDir => goes_up = true,
+            _ => {}
+        }
+    }
+
+    has_file_part && !goes_up
+}
+
+#[cfg(test)]
+mod zone_name_tests {
+    use super::*;
+
+    #[test]
+    fn takes_names_safe_names_but_not_parent_components() {
+        assert!(zone_name_is_safe("Asia/Shanghai"));
+        assert!(zone_name_is_safe("UTC"));
+
+        // 这两个会被拼成 `/usr/share/zoneinfo/../../etc/hostname`。
+        assert!(!zone_name_is_safe("../../../../etc/hostname"));
+        assert!(!zone_name_is_safe("Asia/../../../../etc/hostname"));
+        assert!(!zone_name_is_safe(".."));
+
+        // 没有文件成分的也不是时区名（读目录会得到 EISDIR）。
+        assert!(!zone_name_is_safe(""));
+        assert!(!zone_name_is_safe("/"));
+        assert!(!zone_name_is_safe("."));
+    }
+}

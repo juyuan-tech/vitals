@@ -123,13 +123,16 @@ fn locate_zone() -> Result<Option<(String, String)>, CollectError> {
     if let Some(tz) = env::var("TZ") {
         let tz = tz.trim().trim_start_matches(':').to_owned();
         // `TZ=UTC0` 这类 POSIX 字符串不是文件路径，认不出就当没有（退回 UTC）。
-        if !tz.is_empty() && !tz.starts_with('/') {
+        // 名字里带 `..` 这类成分时不当时区用：它会连同 zoneinfo 目录一起被拼成路径，
+        // 一个环境变量不该把读取带到目录外面去（`users` 那侧一直有这条检查）。
+        let is_absolute = tz.starts_with('/');
+        if !tz.is_empty() && !is_absolute && crate::collectors::tzif::zone_name_is_safe(&tz) {
             let dir = env::var("TZDIR").unwrap_or_else(|| ZONEINFO.to_owned());
             let path = format!("{dir}/{tz}");
             if std::path::Path::new(&path).exists() {
                 return Ok(Some((tz, path)));
             }
-        } else if tz.starts_with('/') && std::path::Path::new(&tz).exists() {
+        } else if is_absolute && std::path::Path::new(&tz).exists() {
             return Ok(Some((tz.clone(), tz)));
         }
     }
