@@ -54,6 +54,14 @@ const COLOR_BLOCKS: usize = 8;
 /// 一格色块有多宽（跟着 fastfetch：三格）。
 const COLOR_BLOCK: &str = "   ";
 
+/// 无条件的重置。
+///
+/// **不能**用 `Style::render_reset()`：它是从「当前这个 Style 有没有属性」推出来的，
+/// 默认 Style 渲染出的是空串。而色块的背景色是由**另一批** Style 设的，行末那个
+/// Style 恰好是默认值——于是重置根本没写出去，最后一格背景会一路渗到行尾（真机
+/// 字节比对抓到的：我们停在 `\x1b[47m   `，fastfetch 后面还有 `\x1b[m`）。
+const COLOR_RESET: &str = "\x1b[0m";
+
 /// 上排：标准 8 色，对应 ANSI 的 `40`-`47`。
 const STANDARD_COLORS: [AnsiColor; COLOR_BLOCKS] = [
     AnsiColor::Black,
@@ -378,7 +386,8 @@ fn write_colors(out: &mut dyn Write, row: u8) -> io::Result<()> {
         write!(out, "{}{COLOR_BLOCK}", style.render())?;
     }
 
-    writeln!(out, "{}", Style::new().render_reset())
+    // 用无条件的重置收尾：理由见 `COLOR_RESET`。
+    writeln!(out, "{COLOR_RESET}")
 }
 
 /// 补空格。
@@ -505,6 +514,13 @@ mod tests {
                 visible(row).chars().count(),
                 8 * 3,
                 "每排 8 格、每格三格宽：{row:?}"
+            );
+            // **必须**以重置收尾：否则最后一格的背景会渗到行尾。
+            // 这里不能用 `Style::render_reset()` 之外的东西来「顺便」满足——
+            // 就是因为它对默认 Style 返回空串，才出现过这个 bug。
+            assert!(
+                row.ends_with("\u{1b}[0m"),
+                "色块行要以重置收尾，否则背景渗出：{row:?}"
             );
         }
     }
