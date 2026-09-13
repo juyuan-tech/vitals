@@ -1,34 +1,51 @@
-//! CLI 薄壳：解析参数、调用 `vitals_rs`、把结果写到 stdout / stderr。
+//! CLI 薄壳：解析参数、调用 `vitals_rs`、决定退出码。
 //!
-//! 阶段 0–2 只有 `--version`、`--help` 和 `--gen-config`；
-//! 完整参数见 `PLAN.md` §4（阶段 3），渲染器在阶段 5 接上。
+//! 这里只干三件事：决定退出码、决定往哪个流写、把逻辑交给 lib。
+//! 采集要到阶段 4、渲染要到阶段 5 才接上，那之前 `vitals` 只如实打印版本，
+//! 不假装已经渲染了什么。
+
+use std::process::ExitCode;
 
 use clap::Parser;
+use vitals_rs::cli::{Cli, Settings};
+use vitals_rs::config::{self, ModuleType};
 use vitals_rs::{PROGRAM, VERSION};
 
-/// 这里必须显式写 `name = "vitals"`：clap 默认取包名，也就是 `vitals-rs`，
-/// 那样 `--version` 会打印成 `vitals-rs 0.1.0`，和命令名对不上。
-#[derive(Debug, Parser)]
-#[command(
-    name = "vitals",
-    version,
-    about = "Your system's vital signs, at a glance."
-)]
-struct Cli {
-    /// 把内置默认配置打印到 stdout，作为自己写配置的起点。
-    #[arg(long = "gen-config")]
-    gen_config: bool,
-}
-
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    // 这两个是「问完就走」的参数：不读配置文件、不采集。
     if cli.gen_config {
-        print!("{}", vitals_rs::config::default_toml());
-        return;
+        print!("{}", config::default_toml());
+        return ExitCode::SUCCESS;
     }
 
-    // 阶段 0 的验收标准：`vitals --version` 输出 `vitals 0.1.0`。
-    // 无参数时暂时也只报版本——渲染器要到阶段 5 才存在。
+    if cli.list_modules {
+        for module in ModuleType::ALL {
+            println!("{}", module.name());
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    let config = match config::load(cli.config.as_deref()) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("{PROGRAM}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let settings = Settings::resolve(&cli, &config);
+
+    // 诊断一律走 stderr：`vitals > 文件` 的时候不该被混进结果里。
+    if settings.verbose {
+        for line in settings.describe() {
+            eprintln!("{PROGRAM}: {line}");
+        }
+    }
+
+    // 阶段 4 在这里接 Dispatcher，阶段 5 接文本渲染器。
     println!("{PROGRAM} {VERSION}");
+
+    ExitCode::SUCCESS
 }

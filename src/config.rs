@@ -95,7 +95,9 @@ fn parse(text: &str, origin: &str) -> Result<Config, ConfigError> {
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     /// 读不到文件（不存在、没权限、不是 UTF-8）。
-    #[error("读取配置文件 {path} 失败")]
+    ///
+    /// 底层原因直接写进消息里：命令行上一行说完，比让人再去翻 `--verbose` 强。
+    #[error("读取配置文件 {path} 失败：{source}")]
     Read {
         /// 出问题的路径。
         path: PathBuf,

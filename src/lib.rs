@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::mod_module_files)]
 
+pub mod cli;
 pub mod config;
 pub mod core;
 
