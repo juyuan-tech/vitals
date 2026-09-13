@@ -22,6 +22,7 @@ pub mod accounts;
 pub mod battery;
 pub mod bios;
 pub mod board;
+pub mod bootmgr;
 pub mod brightness;
 pub mod chassis;
 pub mod cpu;
@@ -42,12 +43,14 @@ pub mod init_system;
 pub mod kernel;
 pub mod line_break;
 pub mod loadavg;
+pub mod local_ip;
 pub mod locale;
 pub mod meminfo;
 pub mod memory;
 pub mod os;
 pub mod os_release;
 pub mod packages;
+pub mod physical_disk;
 pub mod pkgdb;
 pub mod power_adapter;
 pub mod power_supply;
@@ -69,6 +72,7 @@ pub mod tty;
 pub mod units;
 pub mod uptime;
 pub mod user;
+pub mod users;
 pub mod version;
 pub mod wm;
 pub mod wmtheme;
@@ -125,4 +129,8 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &cursor::Cursor,
     &gpu::Gpu,
     &terminal_font::TerminalFont,
+    &local_ip::LocalIp,
+    &users::Users,
+    &physical_disk::PhysicalDisk,
+    &bootmgr::Bootmgr,
 ];

@@ -140,10 +140,19 @@ fn missing_type_field_is_rejected() {
 
 #[test]
 fn unknown_field_inside_a_module_is_rejected() {
-    // 阶段 7 之前的条件字段还没落到 schema 里，写了就得报错，
-    // 不能出现「解析通过但什么也没做」的字段。
-    let error = config::from_toml("[[modules]]\ntype = \"gpu\"\n").unwrap_err();
-    assert!(error.to_string().contains("gpu"));
+    // 模块块里写了个不存在的字段（`deny_unknown_fields`）：不许静默通过，
+    // 也不该出现「解析通过但什么也没做」的字段。
+    //
+    // 原来这条的输入只有 `type = "gpu"`——那**没有**未知字段，所以它一直解析成功，
+    // 测试在 HEAD 上就是红的（条件字段 `when-command-exists` 落地之后更是如此）。
+    let error =
+        config::from_toml("[[modules]]\ntype = \"gpu\"\nshow-hardware = true\n").unwrap_err();
+    let text = error.to_string();
+
+    assert!(
+        text.contains("show-hardware"),
+        "错误该指出拼错的字段名，实际是：{text}"
+    );
 }
 
 // ---------------------------------------------------------------------------

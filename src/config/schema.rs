@@ -297,11 +297,20 @@ pub enum ModuleType {
     Gpu,
     /// 终端用的字体。
     TerminalFont,
+    /// 默认路由那个本机地址。fastfetch 里叫 `LocalIp`（一个词），
+    /// 我们的规范是 kebab-case，别名兼容交给 CLI 层。
+    LocalIp,
+    /// 当前登录的用户会话。
+    Users,
+    /// 物理盘。
+    PhysicalDisk,
+    /// 二级启动器。
+    Bootmgr,
 }
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 41] = [
+    pub const ALL: [Self; 45] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -343,6 +352,10 @@ impl ModuleType {
         Self::Cursor,
         Self::Gpu,
         Self::TerminalFont,
+        Self::LocalIp,
+        Self::Users,
+        Self::PhysicalDisk,
+        Self::Bootmgr,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
@@ -352,7 +365,11 @@ impl ModuleType {
     /// `processes`、`loadavg`（各一行，一眼看到机器忙不忙）和 `rust`（本程序自己的版本）。
     ///
     /// 其余模块配一句 `type = "bios"` 就能加进来，`--list-modules` 会列全。
-    pub const DEFAULT: [Self; 33] = [
+    ///
+    /// 后来补进来的 `bootmgr` 与 `local-ip` 也在 fastfetch 的默认视图里：
+    /// 前者紧跟 `chassis`，后者在 `disk` 之后、`battery` 之前。`users` 与
+    /// `physical-disk` 不进默认视图（fastfetch 默认也不显示它们）。
+    pub const DEFAULT: [Self; 35] = [
         Self::Title,
         Self::Separator,
         Self::Os,
@@ -361,6 +378,7 @@ impl ModuleType {
         Self::Bios,
         Self::Board,
         Self::Chassis,
+        Self::Bootmgr,
         Self::Uptime,
         Self::Packages,
         Self::Shell,
@@ -379,6 +397,7 @@ impl ModuleType {
         Self::Memory,
         Self::Swap,
         Self::Disk,
+        Self::LocalIp,
         Self::Processes,
         Self::Loadavg,
         Self::Battery,
@@ -437,6 +456,10 @@ impl ModuleType {
             Self::Cursor => "cursor",
             Self::Gpu => "gpu",
             Self::TerminalFont => "terminal-font",
+            Self::LocalIp => "local-ip",
+            Self::Users => "users",
+            Self::PhysicalDisk => "physical-disk",
+            Self::Bootmgr => "bootmgr",
         }
     }
 }

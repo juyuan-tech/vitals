@@ -57,6 +57,9 @@ type = "board"
 type = "chassis"
 
 [[modules]]
+type = "bootmgr"
+
+[[modules]]
 type = "uptime"
 
 [[modules]]
@@ -109,6 +112,9 @@ type = "swap"
 
 [[modules]]
 type = "disk"
+
+[[modules]]
+type = "local-ip"
 
 [[modules]]
 type = "processes"

@@ -9,6 +9,24 @@
 /// 系统信息工具跟着它走，免得和用户 `df -h` 看到的数字对不上。
 #[must_use]
 pub fn bytes(bytes: u64) -> String {
+    render(bytes, 1)
+}
+
+/// 把字节数写成 `953.87 GiB`（两位小数）。
+///
+/// 只和 [`bytes`] 差小数位数，所以两条路走同一个 [`render`]。为什么要两位数：
+/// `Physical Disk` 的容量要和 fastfetch 的输出逐字对齐（`57.67 GiB`、`953.87 GiB`），
+/// 而它的小数位数默认就是 2。**不是**「更精确」——`/sys/block/*/size` 本身是整数扇区数，
+/// 两位小数只是显示口径。
+#[must_use]
+pub fn bytes_precise(bytes: u64) -> String {
+    render(bytes, 2)
+}
+
+/// 换算与格式化：`{小数位数}` 是唯一可变的那个参数。
+///
+/// 不足 1024 字节时原样按字节印（和 fastfetch 一样：它连单位换算都不做）。
+fn render(bytes: u64, digits: usize) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
 
     if bytes < 1024 {
@@ -22,7 +40,7 @@ pub fn bytes(bytes: u64) -> String {
         unit += 1;
     }
 
-    format!("{value:.1} {}", UNITS[unit])
+    format!("{value:.digits$} {}", UNITS[unit])
 }
 
 /// 把秒数写成 `3d 4h`、`4h 12m`、`12m 34s`、`34s` 这样的形状。
@@ -79,6 +97,16 @@ mod tests {
         assert_eq!(bytes(1024 * 1024), "1.0 MiB");
         // 实测这台机器的 MemTotal：32140260 kB
         assert_eq!(bytes(32_140_260 * 1024), "30.7 GiB");
+    }
+
+    #[test]
+    fn the_precise_form_uses_two_decimals() {
+        // Physical Disk 的三个真实数字（扇区数 × 512）：USB 优盘、NVMe、zram。
+        assert_eq!(bytes_precise(120_938_496 * 512), "57.67 GiB");
+        assert_eq!(bytes_precise(2_000_409_264 * 512), "953.87 GiB");
+        assert_eq!(bytes_precise(32_139_264 * 512), "15.33 GiB");
+        // 小于 1024 时两条路都按字节印，不换算也不补小数。
+        assert_eq!(bytes_precise(512), "512 B");
     }
 
     #[test]
