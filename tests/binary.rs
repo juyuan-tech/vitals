@@ -511,3 +511,35 @@ fn a_huge_module_list_keeps_every_entry_in_order() {
         assert_eq!(*name, expected, "第 {index} 条的顺序不对");
     }
 }
+
+#[test]
+fn explain_and_sources_together_print_both_reports() {
+    // `--help` 承诺「两个都给就先打状态、再打依据」。早先 `--explain` 分支会直接
+    // 返回，`--sources` 根本不执行——这个测试盯住这个承诺。
+    let output = vitals(&[
+        "--module",
+        "os,memory",
+        "--explain",
+        "--sources",
+        "--logo",
+        "none",
+    ]);
+    assert!(output.status.success(), "两个都给不该失败");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.starts_with("os") && line.contains("显示")),
+        "缺 explain 的状态报告；实际输出：\n{stdout}"
+    );
+
+    let state_at = stdout.find("显示").expect("状态报告的位置");
+    let os_at = stdout
+        .find("/etc/os-release")
+        .expect("缺 sources 的依据报告");
+    let memory_at = stdout.find("/proc/meminfo").expect("缺 sources 的依据报告");
+
+    assert!(state_at < os_at, "该先打状态，再打依据");
+    assert!(state_at < memory_at, "该先打状态，再打依据");
+}

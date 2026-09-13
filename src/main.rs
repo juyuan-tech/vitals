@@ -107,15 +107,18 @@ fn render(settings: &Settings) -> ExitCode {
     // 四种状态各有理由。它天然要真跑一遍采集，否则「空」和「显示」分不出来。
     if settings.explain {
         explain(&settings.modules, &plan, &outcome);
-
-        return ExitCode::SUCCESS;
     }
 
     // `--sources` 说依据：每个模块**实际读了哪些文件**。记录发生在读取那一层
     // （`collectors::read`），所以它说的是实际发生的事，不是一张可能过期的来源表。
+    //
+    // 两个都给就两份都打（`--help` 里就是这么承诺的：「先打状态、再打依据」）。
+    // 早先这里在 explain 之后直接 return，等于把 `--sources` 吞掉了。
     if settings.sources {
         print_sources(&settings.modules, &plan, &outcome);
+    }
 
+    if settings.explain || settings.sources {
         return ExitCode::SUCCESS;
     }
 

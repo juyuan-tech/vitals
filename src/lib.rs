@@ -35,4 +35,4 @@ pub const PROGRAM: &str = "vitals";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 一句话标语。
-pub const TAGLINE: &str = "Your system's vital signs, at a glance.";
+pub const TAGLINE: &str = "你的系统生命体征，一眼看全。";
