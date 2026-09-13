@@ -323,12 +323,12 @@ Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapt
 
 ### 5.5 fastfetch 2.68.1 的模块名（`fastfetch --list-modules` 实测）
 
-本机装的 fastfetch 自己列出的 76 项，是这份清单的**权威来源**。已经做掉 **60** 个
-（`COLLECTORS` 的长度），名字对齐后**共用 58 个**；**待做 18 项**（用它自己的名字）：
+本机装的 fastfetch 自己列出的 76 项，是这份清单的**权威来源**。已经做掉 **61** 个
+（`COLLECTORS` 的长度），名字对齐后**共用 59 个**；**待做 17 项**（用它自己的名字）：
 
-`Bluetooth`、`BluetoothRadio`、`Codec`、`Command`、`Custom`、`Logo`、`Media`、`Monitor`、
-`OpenCL`、`OpenGL`、`PhysicalMemory`、`Player`、`PublicIp`、`TerminalTheme`、`Vulkan`、
-`Wallpaper`、`Weather`、`Zpool`
+`Bluetooth`、`BluetoothRadio`、`Codec`、`Command`、`Custom`、`Logo`、`Media`、`OpenCL`、
+`OpenGL`、`PhysicalMemory`、`Player`、`PublicIp`、`TerminalTheme`、`Vulkan`、`Wallpaper`、
+`Weather`、`Zpool`
 
 另有 **2 项是我们多出来的**（fastfetch 没有）：`rust`（工具链版本，本机常用）与 `user`
 （当前用户）。这张对照表是用它对的名字逐条比出来的，命令：
@@ -822,3 +822,21 @@ if (ffGetTerminalResponse("\e]10;?\e\\" /*fg*/ "\e]11;?\e\\" /*bg*/,
 - fastfetch 在本机对 `Wallpaper` 的实测结果：**空的**（连伪终端下也是空）。
 
 没有数据源就没有可验证的真值，同样不做。
+
+## §5.14 默认视图的回归证据（`b2cd8e5` 之后）
+
+本会话连续 9 个提交之后重跑一次结构比对。口径换成 JSON：键的提取会被 Logo 左列污染，
+比模块序列干净得多。
+
+```
+$ vitals --json | 类型序列
+['title', 'os', 'host', 'kernel', 'uptime', 'packages', 'shell', 'display', 'wm', 'cursor',
+ 'terminal', 'terminal-font', 'cpu', 'gpu', 'memory', 'swap', 'disk', 'local-ip', 'battery', 'locale']
+```
+
+**20 个模块，与 fastfetch 默认视图里非布局项的那 20 个逐项、逐序一致**
+（它的 `Separator`/`Break`/`Colors` 是布局原语，按设计不进 JSON——见 §5.6 与
+`render/json.rs` 的过滤条件）。
+
+已知的**唯一**结构差异仍是 `Disk`：它对每个挂载点各印一行（本机多出外接的
+`/run/media/gxyarch/Kingston`），我们只印根分区那一行；这条记在 §5.9。
