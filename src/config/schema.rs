@@ -330,6 +330,8 @@ pub enum ModuleType {
     Mouse,
     /// 游戏手柄。
     Gamepad,
+    /// 16 个色块（渲染器画）。
+    Colors,
     /// 网卡收发速率。
     NetIo,
     /// 物理盘读写速率。
@@ -342,7 +344,7 @@ pub enum ModuleType {
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 59] = [
+    pub const ALL: [Self; 60] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -402,6 +404,7 @@ impl ModuleType {
         Self::DiskIo,
         Self::CpuUsage,
         Self::Top,
+        Self::Colors,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
@@ -420,7 +423,7 @@ impl ModuleType {
     /// `fastfetch --pipe true -l none` 的默认输出里没有这四个键
     /// （Network I/O、Disk I/O、CPU Usage、Top Processes）。
     /// 它们都要「采样两次」，默认就无条件让整体慢 200 ms 说不过去。
-    pub const DEFAULT: [Self; 22] = [
+    pub const DEFAULT: [Self; 24] = [
         Self::Title,
         Self::Separator,
         Self::Os,
@@ -443,6 +446,9 @@ impl ModuleType {
         Self::LocalIp,
         Self::Battery,
         Self::Locale,
+        // fastfetch 的默认视图以「空行 + 色块」收尾（真机对比过），所以这两条也在。
+        Self::Break,
+        Self::Colors,
     ];
 
     /// 模块名。
@@ -512,6 +518,7 @@ impl ModuleType {
             Self::DiskIo => "disk-io",
             Self::CpuUsage => "cpu-usage",
             Self::Top => "top",
+            Self::Colors => "colors",
         }
     }
 }

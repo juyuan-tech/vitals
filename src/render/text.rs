@@ -45,6 +45,39 @@ const RULE_MODULE: &str = "separator";
 /// 标题模块。分隔线跟它的值一样宽。
 const TITLE_MODULE: &str = "title";
 
+/// 只发标记、由渲染器铺色块的模块。
+const COLORS_MODULE: &str = "colors";
+
+/// 一排几格色块。
+const COLOR_BLOCKS: usize = 8;
+
+/// 一格色块有多宽（跟着 fastfetch：三格）。
+const COLOR_BLOCK: &str = "   ";
+
+/// 上排：标准 8 色，对应 ANSI 的 `40`-`47`。
+const STANDARD_COLORS: [AnsiColor; COLOR_BLOCKS] = [
+    AnsiColor::Black,
+    AnsiColor::Red,
+    AnsiColor::Green,
+    AnsiColor::Yellow,
+    AnsiColor::Blue,
+    AnsiColor::Magenta,
+    AnsiColor::Cyan,
+    AnsiColor::White,
+];
+
+/// 下排：亮色，对应 `100`-`107`。
+const BRIGHT_COLORS: [AnsiColor; COLOR_BLOCKS] = [
+    AnsiColor::BrightBlack,
+    AnsiColor::BrightRed,
+    AnsiColor::BrightGreen,
+    AnsiColor::BrightYellow,
+    AnsiColor::BrightBlue,
+    AnsiColor::BrightMagenta,
+    AnsiColor::BrightCyan,
+    AnsiColor::BrightWhite,
+];
+
 /// 文本渲染器。
 #[derive(Debug)]
 pub struct TextRenderer {
@@ -87,7 +120,8 @@ impl Renderer for TextRenderer {
         // 否则它会去够自己的长度。
         let info_width = lines
             .iter()
-            .filter(|line| !line.rule)
+            // 分隔线不算：它会去够自己的长度。色块算——它真的占列。
+            .filter(|line| line.kind != Kind::Rule)
             .map(Line::width)
             .max()
             .unwrap_or(0);
@@ -106,7 +140,7 @@ impl Renderer for TextRenderer {
 
         // 线有多长，现在才量得出来。
         for line in &mut lines {
-            if line.rule {
+            if line.kind == Kind::Rule {
                 line.value = RULE.to_string().repeat(rule_width);
             }
         }
@@ -170,15 +204,41 @@ struct Line {
     key: String,
     /// 值。分隔线的值在 `render` 里才填上，因为那时才知道该铺多长。
     value: String,
-    /// 是不是分隔线。
-    rule: bool,
+    /// 这一行是哪一种。三种行的画法互不相干，用一个枚举说清楚，
+    /// 比堆两个互斥的 bool 好读。
+    kind: Kind,
+}
+
+/// 行的种类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    /// `键: 值`。
+    Info,
+    /// 分隔线。值是空的，铺线的那一刻才知道该多长。
+    Rule,
+    /// 色块。`0` 是标准 8 色（`40`-`47`），`1` 是亮色（`100`-`107`）。
+    Colors(u8),
 }
 
 impl Line {
+    /// 一行色块。
+    fn colors(row: u8) -> Self {
+        Self {
+            key: String::new(),
+            value: String::new(),
+            kind: Kind::Colors(row),
+        }
+    }
+
     /// 这一行占多少列。
     ///
     /// 算的是**纯文本**：颜色转义码不占列，所以这里不把它们算进去。
     fn width(&self) -> usize {
+        if let Kind::Colors(_) = self.kind {
+            // 色块也占列：这一屏放不放得下 Logo 得把它算进去。
+            return COLOR_BLOCKS * COLOR_BLOCK.len();
+        }
+
         if self.key.is_empty() {
             // 无键行：既没有键也没有 `: `，值有多宽就多宽。
             return display_width(&self.value);
@@ -197,10 +257,24 @@ impl Line {
 fn layout(entries: &[Info]) -> Vec<Line> {
     entries
         .iter()
-        .map(|info| Line {
-            key: info.key.clone(),
-            value: info.value.clone(),
-            rule: info.module == RULE_MODULE,
+        .flat_map(|info| {
+            // 一条 colors 标记铺成两行（上排标准色、下排亮色）。**在这里就展开**，
+            // 后面「与画面并肩」那段才不用知道色块有几行——它只管按行号配画面。
+            if info.module == COLORS_MODULE {
+                return vec![Line::colors(0), Line::colors(1)];
+            }
+
+            let kind = if info.module == RULE_MODULE {
+                Kind::Rule
+            } else {
+                Kind::Info
+            };
+
+            vec![Line {
+                key: info.key.clone(),
+                value: info.value.clone(),
+                kind,
+            }]
         })
         .collect()
 }
@@ -246,6 +320,11 @@ fn write_art(out: &mut dyn Write, art: &str, color: AnsiColor) -> io::Result<()>
 
 /// 写一条信息行：键右对齐、上色，然后分隔符，再是值。
 fn write_row(out: &mut dyn Write, line: &Line, theme: Theme) -> io::Result<()> {
+    // 色块不走「键: 值」那套：键与值都是空的，背景色由它自己带。
+    if let Kind::Colors(row) = line.kind {
+        return write_colors(out, row);
+    }
+
     if line.key.is_empty() {
         // 无键行。空值就是空行（`break`），非空值当标题使——标题用键的样式，
         // 它本来就是这一段的主标题。
@@ -253,7 +332,11 @@ fn write_row(out: &mut dyn Write, line: &Line, theme: Theme) -> io::Result<()> {
             return writeln!(out);
         }
 
-        let style = if line.rule { theme.value } else { theme.key };
+        let style = if line.kind == Kind::Rule {
+            theme.value
+        } else {
+            theme.key
+        };
         return writeln!(
             out,
             "{}{}{}",
@@ -278,6 +361,24 @@ fn write_row(out: &mut dyn Write, line: &Line, theme: Theme) -> io::Result<()> {
         line.value,
         theme.value.render_reset()
     )
+}
+
+/// 一行 8 格色块。
+///
+/// 上排标准 8 色、下排亮色，每格三格宽，行末一个 reset——与 fastfetch 的排法一致。
+/// **不跟**它在第二排前面加的那个 `\x1b[5m`（闪烁）：闪烁是用户会专门去关掉的东西。
+fn write_colors(out: &mut dyn Write, row: u8) -> io::Result<()> {
+    for index in 0..COLOR_BLOCKS {
+        let color = if row == 0 {
+            STANDARD_COLORS[index]
+        } else {
+            BRIGHT_COLORS[index]
+        };
+        let style = Style::new().bg_color(Some(color.into()));
+        write!(out, "{}{COLOR_BLOCK}", style.render())?;
+    }
+
+    writeln!(out, "{}", Style::new().render_reset())
 }
 
 /// 补空格。
@@ -375,6 +476,37 @@ mod tests {
         );
         // 而且那一列得在画面之后（画面最宽 3 列 + 间隔 2 列）——上下留白处也要让开。
         assert_eq!(starts[0], 5, "键该从画面右边开始：\n{text}");
+    }
+
+    #[test]
+    fn the_colors_marker_becomes_two_rows_of_blocks() {
+        let entries = vec![
+            Info::new("os", "OS", "Arch Linux"),
+            Info::new("colors", "", ""),
+        ];
+        let report = Report {
+            logo: None,
+            entries: &entries,
+            failures: &[],
+        };
+        let text = render_to_string(&TextRenderer::with_columns(Theme::default(), 80), &report);
+
+        // 上排标准色、下排亮色，与 fastfetch 的排法一致（实测它的字节就是这样）。
+        for code in ["\u{1b}[40m", "\u{1b}[47m", "\u{1b}[100m", "\u{1b}[107m"] {
+            assert!(text.contains(code), "缺少 {code:?}：{text:?}");
+        }
+        // 它在第二排前面加的闪烁（`\x1b[5m`）我们不跟。
+        assert!(!text.contains("\u{1b}[5m"), "不跟着闪：{text:?}");
+
+        let rows: Vec<&str> = text.lines().collect();
+        assert_eq!(rows.len(), 3, "一行信息 + 两行色块：{text:?}");
+        for row in &rows[1..] {
+            assert_eq!(
+                visible(row).chars().count(),
+                8 * 3,
+                "每排 8 格、每格三格宽：{row:?}"
+            );
+        }
     }
 
     #[test]

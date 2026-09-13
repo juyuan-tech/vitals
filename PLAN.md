@@ -323,12 +323,20 @@ Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapt
 
 ### 5.5 fastfetch 2.68.1 的模块名（`fastfetch --list-modules` 实测）
 
-本机装的 fastfetch 自己列出的 76 项，是这份清单的**权威来源**。已经做掉 **59** 个
-（见 `COLLECTORS` 的长度），剩下 **17** 个（按它给的顺序）：
+本机装的 fastfetch 自己列出的 76 项，是这份清单的**权威来源**。已经做掉 **60** 个
+（`COLLECTORS` 的长度），名字对齐后**共用 58 个**；**待做 18 项**（用它自己的名字）：
 
-`Bluetooth`、`BluetoothRadio`、`CPUUsage`、`Codec`、`Colors`、`Command`、`Custom`、
-`Media`、`Monitor`、`OpenCL`、`OpenGL`、`PhysicalMemory`、`Player`、`PublicIp`、
-`TerminalTheme`、`Vulkan`、`Wallpaper`、`Weather`、`Zpool`
+`Bluetooth`、`BluetoothRadio`、`Codec`、`Command`、`Custom`、`Logo`、`Media`、`Monitor`、
+`OpenCL`、`OpenGL`、`PhysicalMemory`、`Player`、`PublicIp`、`TerminalTheme`、`Vulkan`、
+`Wallpaper`、`Weather`、`Zpool`
+
+另有 **2 项是我们多出来的**（fastfetch 没有）：`rust`（工具链版本，本机常用）与 `user`
+（当前用户）。这张对照表是用它对的名字逐条比出来的，命令：
+
+```sh
+fastfetch --list-modules | sed -E 's/^[0-9]+\)[[:space:]]*//; s/[[:space:]]*:.*//' | tr -d '-' | tr A-Z a-z | sort -u
+./target/release/vitals --list-modules | tr -d '-' | tr A-Z a-z | sort -u
+```
 
 > 上面这份 17 项是 76 减去已完成的 59。其中**真能做的**：`Colors`（渲染器算）、
 > `Monitor`（`Display` 的另一半，需要单独一套键）、`Custom`（用户给的值，不起进程）、

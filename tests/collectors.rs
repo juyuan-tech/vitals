@@ -79,7 +79,7 @@ fn the_kernel_backed_modules_always_have_data() {
 #[test]
 fn every_entry_has_a_non_empty_shape() {
     /// 排版原语：它们的内容由渲染器决定，采集器只发一个空标记。
-    const LAYOUT: [&str; 2] = ["separator", "break"];
+    const LAYOUT: [&str; 3] = ["separator", "break", "colors"];
 
     let plan = registered();
     let outcome = Dispatcher::new(COLLECTORS).run(&plan, &context());

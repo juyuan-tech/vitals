@@ -29,6 +29,7 @@ pub mod brightness;
 pub mod btrfs;
 pub mod camera;
 pub mod chassis;
+pub mod colors;
 pub mod cpu;
 pub mod cpu_cache;
 pub mod cpu_usage;
@@ -164,4 +165,5 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &disk_io::DiskIo,
     &cpu_usage::CpuUsage,
     &top::Top,
+    &colors::Colors,
 ];

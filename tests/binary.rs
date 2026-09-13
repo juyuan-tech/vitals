@@ -232,9 +232,10 @@ fn the_title_has_no_key_and_the_rule_matches_the_title() {
 
 #[test]
 fn json_leaves_out_the_layout_only_primitives() {
-    let document: serde_json::Value =
-        serde_json::from_slice(&vitals(&["--json", "--module", "title,separator,break,os"]).stdout)
-            .unwrap();
+    let document: serde_json::Value = serde_json::from_slice(
+        &vitals(&["--json", "--module", "title,separator,break,colors,os"]).stdout,
+    )
+    .unwrap();
     let types: Vec<&str> = document["entries"]
         .as_array()
         .unwrap()
@@ -245,7 +246,7 @@ fn json_leaves_out_the_layout_only_primitives() {
     assert_eq!(
         types,
         ["title", "os"],
-        "分隔线与空行只在文本版式里有意义，JSON 里不该出现"
+        "分隔线、空行与色块只在文本版式里有意义，JSON 里不该出现"
     );
 }
 

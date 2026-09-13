@@ -103,3 +103,9 @@ type = "battery"
 
 [[modules]]
 type = "locale"
+
+[[modules]]
+type = "break"
+
+[[modules]]
+type = "colors"
