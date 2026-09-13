@@ -321,6 +321,29 @@ Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapt
 | **第八批** | PublicIp、Weather | 要 `net` feature（`ureq`） | ⏳ |
 | **不属于模块** | Logo（查询内置 Logo，给 JSON 用）、Separator/Break（渲染原语，见 §6.1） | | |
 
+### 5.5 fastfetch 2.68.1 的模块名（`fastfetch --list-modules` 实测）
+
+本机装的 fastfetch 自己列出的 76 项，是这份清单的**权威来源**。已经做掉的 41 个不重复列，
+剩下 36 个（按它给的顺序）：
+
+`Bluetooth`、`BluetoothRadio`、`Bootmgr`、`Btrfs`、`CPUCache`、`CPUUsage`、`Camera`、`Codec`、
+`Colors`、`Command`、`Custom`、`DateTime`、`DiskIO`、`Gamepad`、`Keyboard`、`Mouse`、`LM`、
+`LocalIp`、`Media`、`Player`、`Monitor`、`NetIO`、`OpenCL`、`OpenGL`、`PhysicalDisk`、
+`PhysicalMemory`、`PublicIp`、`Sound`、`TerminalTheme`、`Top`、`Users`、`Vulkan`、`Wallpaper`、
+`Weather`、`Wifi`、`Zpool`
+
+三条从这份清单里读出来的事实：
+
+1. **fastfetch 的模块名都是单个词**：`TerminalFont`、`LocalIp`、`PhysicalDisk`、`CPUUsage`、
+   `WMTheme`、`InitSystem`、`TerminalSize`、`PowerAdapter`、`NetIO`、`DiskIO`。
+   我们的规范是 kebab-case（`terminal-font`、`init-system`…），两边在 4 个已做模块上不一致。
+   决定：**kebab-case 保持为我们的规范**，到 CLI 阶段给每个模块加 fastfetch 拼写的
+   **别名**（配置与 `--structure` 都认），`--list-modules` 仍印我们自己的名字。
+2. `Monitor` 是 `Display` 的别名（「Same as Display module, but with a different default output
+   format」）、`Logo` 是给 JSON 用的内置 Logo 查询——这三个都不是新采集器。
+3. `Command`（跑自定义脚本）与 `Custom`（自定义字符串）是**用户内容**不是系统信息；
+   `Command` 要开子进程，与「零子进程」原则冲突，单独评估。
+
 **做得比 fastfetch 好的地方**（这是目标，不是口号）：
 
 1. **核心三十多个模块零子进程**：fastfetch 为拿终端名、字体、主题会起不少进程。
