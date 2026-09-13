@@ -167,34 +167,98 @@ fn parse_mode(mode: &str) -> Option<(u32, u32)> {
 /// 刷新率 = 像素时钟 / (行总数 × 场总数)。算出来的分辨率与 `modes` 里的对不上就
 /// 返回 `None`——那说明这个 descriptor 描述的不是当前这个模式。
 fn refresh_of(edid: &[u8], width: u32, height: u32) -> Option<u32> {
-    /// detailed timing descriptor 在 EDID 里的偏移与长度。
-    const DTD_OFFSET: usize = 54;
-    const DTD_LEN: usize = 18;
-
-    let dtd = edid.get(DTD_OFFSET..DTD_OFFSET + DTD_LEN)?;
-
-    let pixel_clock = u32::from(u16::from_le_bytes([dtd[0], dtd[1]])) * 10_000;
-    if pixel_clock == 0 {
-        return None;
-    }
-
-    let active_width = u32::from(dtd[2]) | (u32::from(dtd[4] & 0xf0) << 4);
-    let blank_width = u32::from(dtd[3]) | (u32::from(dtd[4] & 0x0f) << 8);
-    let active_height = u32::from(dtd[5]) | (u32::from(dtd[7] & 0xf0) << 4);
-    let blank_height = u32::from(dtd[6]) | (u32::from(dtd[7] & 0x0f) << 8);
-
-    if (active_width, active_height) != (width, height) {
-        return None;
-    }
-
-    let pixels = u32::checked_mul(active_width + blank_width, active_height + blank_height)?;
-    if pixels == 0 {
-        return None;
-    }
-
     // 四舍五入到整数赫兹：EDID 里的时钟是 10 kHz 量化的，本来就不是精确值。
-    let refresh = (f64::from(pixel_clock) / f64::from(pixels)).round();
+    let refresh = refresh_exact(edid, width, height)?.round();
+
     (refresh > 0.0 && refresh < 1000.0).then_some(refresh as u32)
+}
+
+/// 与 [`refresh_of`] 同一份计算，但**不四舍五入**。
+///
+/// 同一个数有两种用法：`Display` 印 `120 Hz`（人看的一行），`Monitor` 印 `120.001`
+/// （fastfetch 的口径，真机比对过）。取数层给精确值，怎么舍由各自的渲染决定——
+/// 所以这里不重复解析，只把最后的 `.round()` 留在上面那层。
+pub(crate) fn refresh_exact(edid: &[u8], width: u32, height: u32) -> Option<f64> {
+    #[allow(clippy::items_after_statements)]
+    {
+        /// detailed timing descriptor 在 EDID 里的偏移与长度。
+        const DTD_OFFSET: usize = 54;
+        const DTD_LEN: usize = 18;
+
+        let dtd = edid.get(DTD_OFFSET..DTD_OFFSET + DTD_LEN)?;
+
+        let pixel_clock = u32::from(u16::from_le_bytes([dtd[0], dtd[1]])) * 10_000;
+        if pixel_clock == 0 {
+            return None;
+        }
+
+        let active_width = u32::from(dtd[2]) | (u32::from(dtd[4] & 0xf0) << 4);
+        let blank_width = u32::from(dtd[3]) | (u32::from(dtd[4] & 0x0f) << 8);
+        let active_height = u32::from(dtd[5]) | (u32::from(dtd[7] & 0xf0) << 4);
+        let blank_height = u32::from(dtd[6]) | (u32::from(dtd[7] & 0x0f) << 8);
+
+        if (active_width, active_height) != (width, height) {
+            return None;
+        }
+
+        let pixels = u32::checked_mul(active_width + blank_width, active_height + blank_height)?;
+        if pixels == 0 {
+            return None;
+        }
+
+        let refresh = f64::from(pixel_clock) / f64::from(pixels);
+        (refresh > 0.0 && refresh < 1000.0).then_some(refresh)
+    }
+}
+
+// 这两个解析是 `Monitor` 的前置：`display.rs` 已经读了 EDID，`Monitor` 要的是同一份
+// 数据（名字与物理尺寸）。**`monitor` 接上时把这两行 `#[allow(dead_code)]` 删掉**——
+// 现在留着它只是因为那个模块还没落地，不是打算长期不用。
+#[allow(dead_code)]
+/// EDID 的**厂商字母 + 产品码**，例如 `SDC4197`。
+///
+/// 这不是那个 `00 00 00 FC` 的「显示器名描述符」——本机的 EDID 里根本没有那一段
+/// （四个描述符槽位全是详细时序），而 fastfetch 照样印出了 `SDC4197`。对着它的输出
+/// 反查真机 EDID 才知道它拼的是：
+///
+///   - 偏移 8..10：厂商 ID，大端，三个 5 位字母
+///   - 偏移 10..12：产品码，小端
+///
+/// 两段任一为零就是没有。
+pub(crate) fn name_of(edid: &[u8]) -> Option<String> {
+    let manufacturer = u16::from_be_bytes([*edid.get(8)?, *edid.get(9)?]);
+    let product = u16::from_le_bytes([*edid.get(10)?, *edid.get(11)?]);
+
+    if manufacturer == 0 || product == 0 {
+        return None;
+    }
+
+    // 三个字母，每 5 位一个，从高位开始（偏移 15、10、5 起，各取 5 位）。
+    let letters: String = [10, 5, 0]
+        .into_iter()
+        .map(|shift| char::from_u32(u32::from((manufacturer >> shift) & 0x1f) + 0x40))
+        .collect::<Option<String>>()?;
+
+    Some(format!("{letters}{product:04X}"))
+}
+
+// 这两个解析是 `Monitor` 的前置：`display.rs` 已经读了 EDID，`Monitor` 要的是同一份
+// 数据（名字与物理尺寸）。**`monitor` 接上时把这两行 `#[allow(dead_code)]` 删掉**——
+// 现在留着它只是因为那个模块还没落地，不是打算长期不用。
+#[allow(dead_code)]
+/// 屏幕物理尺寸（毫米），来自 EDID 基础显示参数里的**厘米**字段（偏移 21、22）再乘 10。
+///
+/// 为什么不取详细时序描述符里那对毫米（偏移 54+12/13）：本机 DTD 写的是 `302x189`，
+/// 而 fastfetch 印 `300x190 mm`——它用的是厘米那对（`30x19` cm），据此算出的
+/// `13.98 inches / 242.93 ppi` 也正好对上。差 2 毫米看着无所谓，但这一行是拿它的
+/// 输出逐字比对的，口径就得跟它一样。
+///
+/// 两个字段都为 0 视为没有（投影仪、虚拟屏常见）。
+pub(crate) fn physical_size_mm(edid: &[u8]) -> Option<(u32, u32)> {
+    let width = u32::from(*edid.get(21)?);
+    let height = u32::from(*edid.get(22)?);
+
+    (width > 0 && height > 0).then(|| (width * 10, height * 10))
 }
 
 #[cfg(test)]
@@ -254,6 +318,54 @@ mod tests {
         let edid = edid_with(64_299, 2880, 1800);
 
         assert_eq!(refresh_of(&edid, 2880, 1800), Some(120));
+    }
+
+    #[test]
+    fn the_exact_refresh_keeps_the_third_decimal() {
+        // 这几个数**抄自本机 eDP 的 EDID**（不是编的）：像素时钟 65227（单位 10 kHz）、
+        // 行消隐 100、场消隐 24 → 行总数 2980、场总数 1824 → 120.0014 Hz。
+        // `Monitor` 要印 `120.001`，`Display` 印 `120`——同一个数，两种舍法。
+        let mut edid = edid_with(65_227, 2880, 1800);
+        edid[54 + 3] = 100;
+        edid[54 + 6] = 24;
+
+        let exact = refresh_exact(&edid, 2880, 1800).unwrap();
+
+        assert_eq!(format!("{exact:.3}"), "120.001");
+        assert_eq!(refresh_of(&edid, 2880, 1800), Some(120), "显示那条仍是整数");
+    }
+
+    #[test]
+    fn the_name_is_the_vendor_letters_plus_the_product_code() {
+        // 合成 fixture（不是真 EDID 的副本）：照真机那块的字段布局填，
+        // 厂商 `SDC`、产品码 `0x4197`——与 fastfetch 印出的 `SDC4197` 对应。
+        let mut edid = edid_with(64_299, 2880, 1800);
+        let manufacturer: u16 =
+            (('S' as u16 - 64) << 10) | (('D' as u16 - 64) << 5) | ('C' as u16 - 64);
+        edid[8..10].copy_from_slice(&manufacturer.to_be_bytes());
+        edid[10..12].copy_from_slice(&0x4197u16.to_le_bytes());
+
+        assert_eq!(name_of(&edid).as_deref(), Some("SDC4197"));
+    }
+
+    #[test]
+    fn the_physical_size_comes_from_the_centimetre_fields() {
+        // 同样合成：偏移 21/22 是厘米，30×19 cm → 300×190 mm。
+        let mut edid = edid_with(64_299, 2880, 1800);
+        edid[21] = 30;
+        edid[22] = 19;
+
+        assert_eq!(physical_size_mm(&edid), Some((300, 190)));
+    }
+
+    #[test]
+    fn a_blank_edid_has_no_name_and_no_size() {
+        let edid = vec![0u8; 128];
+
+        assert_eq!(name_of(&edid), None);
+        assert_eq!(physical_size_mm(&edid), None);
+        assert_eq!(name_of(&edid[..4]), None, "短到读不出字段也是 None");
+        assert_eq!(physical_size_mm(&edid[..8]), None);
     }
 
     #[test]

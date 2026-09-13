@@ -70,8 +70,11 @@ mod tests {
         // 容器里 /proc/uptime 也在，所以这里应当有值。
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].key, "Uptime");
+        // 单复数都合法（`1 min` 与 `41 mins`），所以按整词判，不能只看末字母——
+        // 之前写成「以 d/h/m/s 结尾」，遇到 `1 day`/`1 min` 这种就会假失败。
+        const UNITS: [&str; 8] = ["day", "days", "hour", "hours", "min", "mins", "sec", "secs"];
         assert!(
-            entries[0].value.ends_with(['d', 'h', 'm', 's']),
+            UNITS.iter().any(|unit| entries[0].value.ends_with(unit)),
             "时长该带单位：{}",
             entries[0].value
         );
