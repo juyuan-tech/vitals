@@ -55,6 +55,17 @@ impl Context {
     }
 }
 
+#[cfg(test)]
+impl Context {
+    /// 单元测试用的上下文：平台信息留空，超时给足。
+    ///
+    /// 模块的单元测试只关心自己那段解析逻辑，不需要真的平台信息。
+    /// 集成测试用不上它（`cfg(test)` 不跨 crate），那边自己构造。
+    pub(crate) fn for_tests() -> Self {
+        Self::new(Platform::default(), Duration::from_secs(5))
+    }
+}
+
 /// 平台信息。
 ///
 /// 字段都是从 `/etc/os-release` 里读的那两个键：

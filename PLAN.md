@@ -240,15 +240,25 @@ OS、Host、Kernel、Uptime、Shell、User、CPU、Memory、Disk、Rust。
 | Host | `/sys/devices/virtual/dmi/id/` | 读不到时回退 `/proc/device-tree/model` |
 | Kernel | `rustix::system::uname()` | 实测可用，零 unsafe |
 | Uptime | `/proc/uptime` | 直读，微秒级 |
-| Shell / User | 环境变量 + `/etc/passwd` | 不 fork |
+| Shell | `$SHELL` → `/etc/passwd` 的登录 shell | 「此刻在跑哪个」由会话决定，所以环境变量优先；不 fork |
+| User | uid（`/proc/self/status`）→ `/etc/passwd` | 「我是谁」以 uid 为准：`$USER` 在 `su`/`sudo` 之后可能是陈旧的，只作兜底 |
 | CPU | `/proc/cpuinfo` + `/sys/devices/system/cpu/` | 只做型号与核心数（必要时加频率）；**不做占用率**，理由见 §5.3 |
 | Memory | `/proc/meminfo` | 直读 |
 | Disk | `rustix::fs::statvfs()` + `/proc/mounts` | 实测可用；`statvfs` 才能拿到用量 |
-| Rust | `~/.rustup/settings.toml` 或环境变量 | ⚠️ 见下 |
+| Rust | `$RUSTUP_TOOLCHAIN` → `$RUSTUP_HOME/settings.toml` 的 `default_toolchain` | 见下 |
 
-> ⚠️ **Rust 模块是十个里唯一可能必须开子进程的**：`rustc --version` 无法靠读文件得到确切版本。
-> 两个选择：(a) 只读 `~/.rustup/settings.toml` 的 `default_toolchain` 与环境变量（快，但不精确）；
-> (b) 调 `rustc --version` 并走超时路径（准，但要付进程开销）。**请定一个**，否则实现时会临时拍脑袋。
+> **Rust 模块已拍板：只读文件，不开子进程。** `rustc --version` 更准，但要付进程开销，
+> 而这里的取舍是「能读文件就不开子进程」。因此该项显示的是**工具链名**
+> （`stable-x86_64-unknown-linux-gnu`），不是编译器版本号——文案上必须诚实，不能标成 `rustc`。
+>
+> 优先级是**环境变量 > `settings.toml`**：`RUSTUP_TOOLCHAIN` 说的是「此刻生效的是哪个」。
+> 实测：本项目用 `rust-toolchain.toml` 钉了 stable，于是在仓库里跑出来是 stable，
+> 在仓库外跑出来是 rustup 的默认 nightly——两者都对，因为「此刻生效的」本来就不同。
+>
+> 代价：只装了系统 `rustc`（没有 rustup）的机器上该模块无数据。可以接受——无数据不报错、不留警告。
+>
+> **至此 v0.1 的十个模块一个子进程都不开**，`Context::timeout` 因此暂时无人使用，
+> 留给 v0.2 的 GPU（`nvidia-smi`）这类模块。
 
 ### 5.2 v0.2 扩展模块（按优先级）
 
@@ -439,12 +449,12 @@ CPU 模块只负责：型号、物理/逻辑核心数（必要时加频率）。
 
 ---
 
-## 附：仍待拍板的两件事
+## 附：仍待拍板的一件事
 
-（CPU 占用率已按「不做非必要功能」的原则关闭，见 §5.3。）
+1. **v0.1 是否包含 JSON 输出**——本计划把它放在 v0.2（阶段 6）。如果你希望 `--json`
+   从第一版就能用，就把阶段 6 提前到阶段 5 之前，里程碑随之调整。
 
-1. **Rust 模块是否保留**——它是十个模块里最像「非必要」的一个，而且是唯一可能需要开子进程的
-   （读 `~/.rustup/settings.toml` 快但不精确；执行 `rustc --version` 准但有进程开销）。
-   按范围纪律可以砍；若保留，默认走读文件、不 fork。
-2. **v0.1 是否包含 JSON 输出**——本计划把它放在 v0.2（阶段 6），如果你希望 `--json` 从第一版就能用，
-   就把阶段 6 提前到阶段 5 之前，里程碑也随之调整
+已经拍板的（留在这里，免得又被翻出来）：
+
+- **CPU 占用率**：不做。理由见 §5.3。
+- **Rust 模块**：保留，只读文件、不开子进程。阶段 4 已落地，理由见 §5.1。

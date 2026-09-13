@@ -14,9 +14,11 @@
 #![warn(clippy::mod_module_files)]
 
 pub mod cli;
+pub mod collectors;
 pub mod config;
 pub mod core;
 
+pub use crate::collectors::COLLECTORS;
 pub use crate::core::collector::{CollectError, Collector, Context, ModuleName, Platform};
 pub use crate::core::dispatch::{Dispatcher, Failure, RunOutcome};
 pub use crate::core::info::Info;
@@ -32,10 +34,3 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 一句话标语。
 pub const TAGLINE: &str = "Your system's vital signs, at a glance.";
-
-/// 模块注册表。
-///
-/// 阶段 4 会把十个采集器填进来。现在**故意是空的**：
-/// 阶段 1 只定接口，不写实现。空数组让 `Dispatcher::new(COLLECTORS)`
-/// 此刻就能编译通过，阶段 4 只是往数组里加元素，不动任何签名。
-pub const COLLECTORS: &[&dyn Collector] = &[];
