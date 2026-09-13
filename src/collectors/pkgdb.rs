@@ -23,6 +23,11 @@ const FLATPAK_SYSTEM: &str = "/var/lib/flatpak/app";
 const FLATPAK_USER: &str = ".local/share/flatpak/app";
 /// snapd 的包文件目录（一个修订版一个 `<名字>_<修订号>.snap` 文件）。
 const SNAP: &str = "/var/lib/snapd/snaps";
+/// AppImage 的目录，相对 `$HOME`。
+///
+/// 只有这一个目录。依据是 fastfetch 二进制里的两个字符串（`.appimage` 与 `/AppImages`）
+/// 加实测：本机 `~/AppImages` 下正好 3 个 `.appimage` 文件，它报 `3 (appimage)`。
+const APPIMAGE: &str = "AppImages";
 
 /// 查一个包的版本。查不到就是 `None`（没装、或者这个包管理器我们不认）。
 pub fn version_of(package: &str) -> Result<Option<String>, CollectError> {
@@ -44,7 +49,28 @@ fn from_pacman_dir(entry: &str, package: &str) -> Option<String> {
     let rest = entry.strip_prefix(package)?.strip_prefix('-')?;
 
     rest.starts_with(|first: char| first.is_ascii_digit())
-        .then(|| strip_epoch(rest).to_owned())
+        .then(|| strip_pkgrel(strip_epoch(rest)).to_owned())
+}
+
+/// 去掉 pacman 的发布号：`1.6.8-1` → `1.6.8`、`261.3-1` → `261.3`。
+///
+/// 与 epoch 同理：`-1` 是**打包**的修订号，不是上游版本号。
+/// `pipewire --version` 打的是 `1.6.8`，`pacman -Q pipewire` 打的是 `1:1.6.8-1`，
+/// 而 fastfetch（它直接问程序）印的也是 `niri 26.04` 而不是 `26.04-1`。
+/// pacman 的版本形状是 `<pkgver>-<pkgrel>`，其中 pkgver **不许含连字符**，
+/// 所以「去掉最后一个全为数字的 `-<段>`」正好就是去掉 pkgrel。
+///
+/// Debian 那条路**不剥**：它的 `<上游版本>-<修订>` 里修订可以长成 `1ubuntu1`
+/// （不是纯数字），而且上游版本本身允许含连字符，判据不成立。
+fn strip_pkgrel(version: &str) -> &str {
+    match version.rsplit_once('-') {
+        Some((rest, pkgrel))
+            if !pkgrel.is_empty() && pkgrel.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            rest
+        }
+        _ => version,
+    }
 }
 
 /// 去掉版本号里的 epoch 前缀：`2:7.1-3` → `7.1-3`、`1:1.6.8-1` → `1.6.8-1`。
@@ -130,11 +156,17 @@ pub struct PackageCount {
 /// 一个都数不到 → 空表。这是**无数据**，不是错误：像 `pacman -Q` 那样去报错
 /// 「没有找到包管理器」只会让容器和极简系统每次都多一行警告。
 ///
-/// 四个数据库各自独立：一个读不了不影响另外三个（少报一路总比整行不报好）。
+/// 五个数据库各自独立：一个读不了不影响另外四个（少报一路总比整行不报好）。
 pub fn counts() -> Result<Vec<PackageCount>, CollectError> {
     let mut counts = Vec::new();
 
     // 分块的顺序就是字母序，不依赖「谁先被发现」；下面的 sort 只是兜底。
+    if let Some(count) = count_appimages()? {
+        counts.push(PackageCount {
+            name: "appimage",
+            count,
+        });
+    }
     if let Some(count) = count_dpkg()? {
         counts.push(PackageCount {
             name: "dpkg",
@@ -215,6 +247,41 @@ fn count_flatpak() -> Result<Option<u64>, CollectError> {
     Ok(found.then_some(total))
 }
 
+/// 数 `$HOME/AppImages` 下以 `.appimage` 结尾的**文件**。
+///
+/// 为什么只扫这一个目录：fastfetch 的二进制里只有 `.appimage` 与 `/AppImages` 两个
+/// 相关字符串，实测也对得上（本机 3 个文件 → 它报 3）。`~/Applications`、
+/// `~/.local/bin`、`/opt` 都没有证据说明它看，多扫只会在别的机器上多报。
+///
+/// 为什么必须只数文件：那个目录里还躺着别的东西——本机有个 `.icons` 目录，
+/// 数全部条目就会变成 4。目录不在、`$HOME` 没有 → `None`（没装，不是失败）。
+fn count_appimages() -> Result<Option<u64>, CollectError> {
+    let Some(home) = env::var("HOME") else {
+        return Ok(None);
+    };
+
+    let Ok(entries) = std::fs::read_dir(format!("{home}/{APPIMAGE}")) else {
+        return Ok(None);
+    };
+
+    let count = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .filter(|entry| entry.file_name().to_str().is_some_and(is_appimage))
+        .count() as u64;
+
+    Ok((count > 0).then_some(count))
+}
+
+/// 这个名字是不是一个 AppImage。
+///
+/// 忽略大小写：本机那三个都是小写 `.appimage`，上游的字符串也是小写，
+/// 但 `AppImage` 这种写法在别处同样常见（上游自己的文档就这么写），一起认。
+/// 只看后缀，不看前缀——AppImage 的文件名就是应用名，没有固定格式。
+fn is_appimage(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".appimage")
+}
+
 /// 数 `*.snap` 文件。目录不在 → `None`。
 fn count_snap_archives(dir: &str) -> Result<Option<u64>, CollectError> {
     let Some(entries) = entries_of(dir)? else {
@@ -280,17 +347,33 @@ mod tests {
     fn pacman_directories_carry_the_version() {
         assert_eq!(
             from_pacman_dir("systemd-261.3-1", "systemd").as_deref(),
-            Some("261.3-1")
+            Some("261.3")
         );
         // 带 epoch 的版本号：epoch 是包管理器的排序装置，对外显示要剥掉（PLAN §5.6）。
+        // 发布号（`-3`、`-1`）同样剥——它也是打包的产物，不是上游版本号。
         assert_eq!(
             from_pacman_dir("ffmpeg-2:7.1-3", "ffmpeg").as_deref(),
-            Some("7.1-3")
+            Some("7.1")
         );
         assert_eq!(
             from_pacman_dir("pipewire-1:1.6.8-1", "pipewire").as_deref(),
-            Some("1.6.8-1")
+            Some("1.6.8")
         );
+        assert_eq!(
+            from_pacman_dir("niri-26.04-1", "niri").as_deref(),
+            Some("26.04"),
+            "fastfetch 印的就是 26.04（它直接问程序）"
+        );
+    }
+
+    #[test]
+    fn strips_only_a_numeric_pkgrel() {
+        assert_eq!(strip_pkgrel("1.6.8-1"), "1.6.8");
+        assert_eq!(strip_pkgrel("26.04-1"), "26.04");
+        assert_eq!(strip_pkgrel("1.0.0-rc1"), "1.0.0-rc1", "rc1 不是数字");
+        assert_eq!(strip_pkgrel("1.0"), "1.0", "没有发布号");
+        assert_eq!(strip_pkgrel("-1"), "");
+        assert_eq!(strip_pkgrel(""), "");
     }
 
     #[test]
@@ -302,6 +385,37 @@ mod tests {
         assert_eq!(strip_epoch(":7.1"), ":7.1");
         assert_eq!(strip_epoch("a:b"), "a:b");
         assert_eq!(strip_epoch("1:"), "");
+    }
+
+    #[test]
+    fn appimage_names_are_matched_case_insensitively() {
+        assert!(is_appimage("微信.appimage"));
+        assert!(is_appimage("tool.AppImage"));
+        assert!(!is_appimage(".icons"));
+        assert!(!is_appimage("appimage"), "没有后缀不算");
+        assert!(!is_appimage("x.appimage.bak"));
+    }
+
+    #[test]
+    fn counts_appimages_on_this_machine() {
+        // 本机 `~/AppImages` 下有 3 个；没有这个目录的机器得到 None。两者都对，
+        // 但不许出现「有目录却报 0」——那是 `(count > 0)` 那个条件在把关。
+        if let Some(count) = count_appimages().unwrap() {
+            assert!(count > 0, "有 AppImage 目录就不该报 0");
+        }
+    }
+
+    #[test]
+    fn appimages_take_part_in_the_combined_count() {
+        // 装了 AppImage 时它必须出现在合并结果里，而且因为字母序排在最前。
+        if count_appimages().unwrap().is_some() {
+            let counts = counts().unwrap();
+            assert_eq!(
+                counts.first().map(|count| count.name),
+                Some("appimage"),
+                "实际：{counts:?}"
+            );
+        }
     }
 
     #[test]

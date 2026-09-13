@@ -373,9 +373,11 @@ Login Manager: login
 （守护进程里），零子进程拿不到；我们报服务本身 + 版本 + 声卡名（放 `variables`），
 理由写在 `sound.rs` 顶部。
 
-**一处待修的**：包数据库给的版本带 pacman 的 epoch（`PipeWire 1:1.6.8-1` 里的 `1:`）。
-项目自己的版本是 `1.6.8`，epoch 只是打包排序用的。`pkgdb::version_of` 应该把 epoch 前缀去掉
-（`-pkgrel` 保留，与本机已有的 `Niri 26.04-1` 一致）。
+**已修的**：包数据库给的版本带 pacman 的 epoch 与发布号（`PipeWire 1:1.6.8-1` 里的 `1:`
+与结尾的 `-1`）。项目自己的版本是 `1.6.8`，这两个都是**打包**的产物而不是上游版本号。
+`pkgdb::version_of` 现在两样都剥（只在冒号前全是数字、末尾段全是数字时剥），
+Debian 那条路只剥 epoch（它的修订可以长成 `1ubuntu1`，且上游版本允许含连字符）。
+剥完与本机 fastfetch 一致：`PipeWire 1.6.8`、`Niri 26.04`、`systemd 261.3`。
 
 第二批参考（`fastfetch -s wifi:bluetooth:bluetoothradio:btrfs:zpool:netio:diskio:camera:gamepad:keyboard:mouse:media:player:wallpaper:physicalmemory:lm:datetime:terminaltheme:codec --pipe`）：
 
@@ -456,10 +458,10 @@ Codec (Decoder): MJPEG, H.264, HEVC / H.265, VP9, AV1
 | 2 | OS | `Arch Linux x86_64` | `Arch Linux` | 我们多带架构 |
 | 3 | Kernel | `Linux 7.2.4-arch1-2` | `7.2.4-arch1-2` | 我们多带 `Linux ` 前缀 |
 | 4 | Uptime | `1d 5h`（紧凑） | `1 day, 5 hours, 31 mins` | 风格不同，不是对错 |
-| 5 | Packages | 少了 appimage、flatpak 计数也不同（3 vs 8） | `3 (appimage), 8 (flatpak), 1042 (pacman)` | **疑似 bug**，要查 `pkgdb` 的分格式计数 |
+| 5 | Packages | ~~少了 appimage、flatpak 计数也不同（3 vs 8）~~ | `3 (appimage), 8 (flatpak), 1042 (pacman)` | **已修一半**：appimage 补上了（数 `~/AppImages` 下 `*.appimage` 文件，依据是 fastfetch 二进制里的 `.appimage`/`/AppImages` 两个字符串加实测）。flatpak 我们**保留 3**（app 目录数）：本机 app 3、runtime 7（其中 2 个是 `*.Locale` 扩展），它那 8 看着是「应用 + 非 Locale 的 runtime」——用户问「装了几个 flatpak 包」问的是应用 |
 | 6 | Display | 键用连接器名（`Display (eDP-1)`），值 `2880x1800 @ 120Hz (Built-in)` | 键用面板型号（`Display (SDC4197)`），值带缩放与尺寸（`@ 1.74x in 14", 120 Hz [Built-in]`） | 面板型号在 EDID 里，我们有 `edid` 的东西吗要查 |
-| 7 | WM | `Niri 26.04-1 (wayland)` | `niri 26.04 (Wayland)` | 它跑二进制拿版本；我们只能读包数据库。**pkgrel（`-1`）要不要也剥掉**（PLAN §5.6 现在写的是保留）——它印 `26.04`，说明上游版本号是剥掉 pkgrel 的那个 |
-| 8 | Memory | `19.56 GiB / 30.65 GiB (64%)` | `19.55 GiB / 30.65 GiB (64%)` | 差 0.01 GiB，**算法口径不同**，要查（`MemTotal - MemAvailable` vs 它那套） |
+| 7 | WM | ~~`Niri 26.04-1 (wayland)`~~ → `Niri 26.04 (wayland)` | `niri 26.04 (Wayland)` | **已修**：pkgrel 剥掉（与 epoch 同理，`-1` 是打包产物）。剩下的只是首字母大小写：我们习惯把名字首字母大写（`Niri`），它原样（`niri`）。保留我们的写法 |
+| 8 | Memory | `20.23 GiB / 30.65 GiB (66%)` | `20.23 GiB / 30.65 GiB (66%)` | **不是差异**：同一时刻对比完全一致。先前看到的 `19.56 vs 19.55` 是两次采样之间的**内存漂移**（我前后隔了几秒分别跑），与 `timeout` 那条一样属于测量假象 |
 
 **比对时的测量假象**（踩过）：用 `timeout 25 fastfetch` 跑它，它会把 `Shell` 认成
 `timeout`、`Terminal` 认成 `node-MainThread`——那是它顺着父进程链看到了我们这边的进程，

@@ -1,18 +1,23 @@
 //! Packages：数一数这台机器上装了多少个包。
 //!
 //! 一个子进程都不开（`PLAN.md` §0-16 就是为这条把「跑 `pacman -Q`」换掉的）：
-//! pacman / flatpak 数目录项，snap 数 `*.snap` 文件，Debian 系数
-//! `/var/lib/dpkg/status` 里的记录。数法都在 [`crate::collectors::pkgdb`] 里，
-//! 与「查某个包的版本」共用同一批路径常量。
+//! pacman / flatpak 数目录项，snap 数 `*.snap` 文件，appimage 数 `~/AppImages` 下
+//! `*.appimage` 文件，Debian 系数 `/var/lib/dpkg/status` 里的记录。数法都在
+//! [`crate::collectors::pkgdb`] 里，与「查某个包的版本」共用同一批路径常量。
 //!
-//! 只做这四个：rpm / nix / xbps / apk 的库要么是 sqlite、要么是自定义格式，
+//! 不做的：rpm / nix / xbps / apk 的库要么是 sqlite、要么是自定义格式，
 //! 不开子进程就得写一个解析器，那是另一个工作量。不做「先写着，读不到就报 0」
 //! 的假条目——报 0 比不报更糟，用户会以为这台机器一个包都没装。
 //!
-//! 值是**一行**：`1042 (pacman), 3 (flatpak)`，每项 `<数量> (<名字>)`，
+//! 值是**一行**：`3 (appimage), 3 (flatpak), 1042 (pacman)`，每项 `<数量> (<名字>)`，
 //! 按名字字母序排（不按发现顺序：那取决于哪个数据库先被读到，
 //! 让文件系统的遍历顺序影响输出是没道理的）。
 //! 数量为 0 的包管理器不出现在结果里；一个都数不到 → 无数据。
+//!
+//! **flatpak 只数应用、不数 runtime**：本机 app 目录 3 个、runtime 目录 7 个（其中 2 个
+//! 是 `*.Locale` 扩展），fastfetch 报 8（3 + 5，看着就是「应用 + 非 Locale 的 runtime」）。
+//! 我们保留 3——用户问「装了几个 flatpak 包」问的是应用，把 runtime 算进去只是让数字变大。
+//! 这是刻意偏差，记在 `PLAN.md` §5.8。
 
 use crate::collectors::pkgdb;
 use crate::core::collector::{CollectError, Collector, Context};
