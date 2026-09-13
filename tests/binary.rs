@@ -445,3 +445,18 @@ fn sources_reports_the_files_each_module_actually_read() {
         "来源串到别的模块了：{os_line:?}"
     );
 }
+
+#[test]
+fn parallel_collection_keeps_the_configured_order() {
+    // `top` 要等一个 200 ms 的采样窗口，`os` 是毫秒级的。如果结果按**完成先后**收，
+    // `os` 会跑到前面去。断言顺序与配置一致，钉的就是「按名单顺序收回」这一条。
+    let output = vitals(&["--json", "--module", "top,os"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let text = stdout(&output);
+    let top = text.find("\"top\"").expect("没有 top 那一项");
+    let os = text.find("\"os\"").expect("没有 os 那一项");
+
+    assert!(top < os, "顺序该按配置来，而不是按完成先后：{text}");
+}

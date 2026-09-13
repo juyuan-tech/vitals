@@ -4,8 +4,9 @@
 //! 另外两步的落点已经标好：
 //!
 //! - **条件评估**（阶段 7）在 `find` 之后、`collect` 之前加一道 `matches`。
-//! - **并行采集**（阶段 10）把 `for` 换成 `std::thread::scope`；
-//!   `Collector: Send + Sync` 和 `&self` 就是为它准备的。
+//! - **并行采集**：已经做了（`std::thread::scope`）。`Collector: Send + Sync` 与 `&self`
+//!   就是为它准备的。最直接的收益是四个采样模块——它们各自要睡 200 ms 等窗口，
+//!   串起来真机实测 821 ms，而这些等待期其实是空转。
 
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
@@ -59,6 +60,17 @@ pub struct ModuleSources {
     pub paths: Vec<String>,
 }
 
+/// 一个模块跑完带回来的东西。
+///
+/// 来源必须跟结果**一起**从线程里带出来：`core::sources` 是线程局部的，
+/// 出了那个线程就取不到了（这也正是每个任务自己 `clear`、自己 `take` 的原因）。
+struct Collected {
+    /// 采集结果。
+    result: Result<Vec<Info>, CollectError>,
+    /// 这个模块实际碰过的路径。
+    paths: Vec<String>,
+}
+
 /// 模块调度器。
 pub struct Dispatcher<'a> {
     collectors: &'a [&'a dyn Collector],
@@ -85,16 +97,54 @@ impl<'a> Dispatcher<'a> {
     pub fn run(&self, plan: &[&str], ctx: &Context) -> RunOutcome {
         let mut outcome = RunOutcome::default();
 
+        // 先按名单逐个找回采集器（找不到名字的照旧记一条失败，不进线程）。
+        let mut runnable: Vec<&'a dyn Collector> = Vec::new();
         for name in plan {
-            let Some(collector) = self.find(name) else {
-                outcome.push_failure(name, CollectError::new(format!("没有名为 `{name}` 的模块")));
-                continue;
-            };
+            match self.find(name) {
+                Some(collector) => runnable.push(collector),
+                None => {
+                    outcome
+                        .push_failure(name, CollectError::new(format!("没有名为 `{name}` 的模块")));
+                }
+            }
+        }
 
-            // 每个模块开始前清空记录、跑完取走：来源归属不会串到下一个模块。
-            sources::clear();
+        // 并行跑，**但结果按名单顺序收回**——行序与配置顺序一致，与完成先后无关。
+        //
+        // 收益最明显的是采样模块：四个各自睡 200 ms 的模块串起来是 821 ms（真机实测），
+        // 而它们的等待期是空转；并行之后总时长≈一次窗口。
+        //
+        // 来源记录用的是线程局部（`core::sources`），所以清空与取走必须在**同一个线程**
+        // 里完成——这就是每个任务自己 `clear`、自己 `take` 的原因。
+        let collected: Vec<Collected> = std::thread::scope(|scope| {
+            let handles: Vec<_> = runnable
+                .iter()
+                .map(|collector| {
+                    scope.spawn(move || {
+                        sources::clear();
+                        let result = collector.collect(ctx);
+                        let paths = sources::take();
 
-            match collector.collect(ctx) {
+                        Collected { result, paths }
+                    })
+                })
+                .collect();
+
+            handles
+                .into_iter()
+                .map(|handle| {
+                    // 某个模块 panic 不该拖垮整趟输出：把它记成这个模块的失败，
+                    // 其余模块照常渲染（与「一个模块出错不中断整体」同一条规矩）。
+                    handle.join().unwrap_or_else(|_| Collected {
+                        result: Err(CollectError::new("采集线程异常结束")),
+                        paths: Vec::new(),
+                    })
+                })
+                .collect()
+        });
+
+        for (collector, collected) in runnable.iter().zip(collected) {
+            match collected.result {
                 // 空 Vec 走到这里也一样：extend 什么都不做，不留痕。
                 Ok(entries) => outcome.entries.extend(entries),
                 Err(error) => outcome.push_failure(collector.name(), error),
@@ -102,7 +152,7 @@ impl<'a> Dispatcher<'a> {
 
             outcome.sources.push(ModuleSources {
                 module: collector.name().to_owned(),
-                paths: sources::take(),
+                paths: collected.paths,
             });
         }
 
