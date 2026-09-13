@@ -332,6 +332,8 @@ pub enum ModuleType {
     Gamepad,
     /// 16 个色块（渲染器画）。
     Colors,
+    /// 显示器的物理参数。
+    Monitor,
     /// 网卡收发速率。
     NetIo,
     /// 物理盘读写速率。
@@ -344,7 +346,7 @@ pub enum ModuleType {
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 60] = [
+    pub const ALL: [Self; 61] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -405,6 +407,7 @@ impl ModuleType {
         Self::CpuUsage,
         Self::Top,
         Self::Colors,
+        Self::Monitor,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
@@ -519,6 +522,7 @@ impl ModuleType {
             Self::CpuUsage => "cpu-usage",
             Self::Top => "top",
             Self::Colors => "colors",
+            Self::Monitor => "monitor",
         }
     }
 }

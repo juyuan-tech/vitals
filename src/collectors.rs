@@ -60,6 +60,7 @@ pub mod local_ip;
 pub mod locale;
 pub mod meminfo;
 pub mod memory;
+pub mod monitor;
 pub mod mouse;
 pub mod net_io;
 pub mod os;
@@ -166,4 +167,5 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &cpu_usage::CpuUsage,
     &top::Top,
     &colors::Colors,
+    &monitor::Monitor,
 ];

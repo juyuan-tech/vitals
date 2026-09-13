@@ -45,7 +45,7 @@ impl Collector for Display {
 }
 
 /// 一个 DRM 连接器。
-struct Connector {
+pub(crate) struct Connector {
     /// 连接器名，如 `eDP-1`。
     name: String,
     /// `/sys/class/drm/card1-eDP-1`。
@@ -57,7 +57,7 @@ struct Connector {
 /// 目录名形如 `card1-eDP-1`：`card1` 只是哪张显卡，`eDP-1` 才是连接器。
 /// `card1`（没有连接器后缀）、`renderD128`、`version` 这些都不是，跳过。
 /// 读不到目录就是无数据。
-fn connectors() -> Vec<Connector> {
+pub(crate) fn connectors() -> Vec<Connector> {
     let Ok(entries) = std::fs::read_dir(DRM) else {
         return Vec::new();
     };
@@ -83,7 +83,28 @@ fn connectors() -> Vec<Connector> {
 }
 
 /// 描述一个连接器；没接显示器就是 `None`。
-fn describe(connector: &Connector, module: &'static str) -> Result<Option<Info>, CollectError> {
+/// 一个**已连接**的显示器的取数结果。
+///
+/// `Display` 与 `Monitor` 要的是同一份数据、两种摆法：前者印 `2880x1800 @ 120Hz`，
+/// 后者印 `2880x1800 px @ 120.001 Hz - 300x190 mm (13.98 inches, 242.93 ppi)`。
+/// 读两遍、解析两份就是重复，所以取数在这里，怎么摆由各自的模块决定。
+pub(crate) struct Facts {
+    /// 连接器名，例如 `eDP-1`。
+    pub(crate) connector: String,
+    /// 是不是内建屏。
+    pub(crate) builtin: bool,
+    /// `modes` 第一行的分辨率。
+    pub(crate) mode: Option<(u32, u32)>,
+    /// **精确**刷新率，不四舍五入（`Display` 印整数、`Monitor` 印三位小数）。
+    pub(crate) refresh_hz: Option<f64>,
+    /// EDID 的厂商字母 + 产品码，例如 `SDC4197`。
+    pub(crate) edid_name: Option<String>,
+    /// EDID 里的屏幕物理尺寸（毫米）。
+    pub(crate) physical_mm: Option<(u32, u32)>,
+}
+
+/// 取一个连接器的数据；没接东西返回 `None`。
+pub(crate) fn facts(connector: &Connector) -> Result<Option<Facts>, CollectError> {
     let status = read::text(&path_of(connector, "status"))?;
     if status.as_deref() != Some("connected") {
         return Ok(None);
@@ -94,36 +115,56 @@ fn describe(connector: &Connector, module: &'static str) -> Result<Option<Info>,
         .and_then(first_line)
         .and_then(parse_mode);
 
-    // 刷新率只在 EDID 的首选时序与 `modes` 第一行对得上时才用。
-    let refresh = match mode {
-        Some((width, height)) => read::bytes(&path_of(connector, "edid"))?
-            .as_deref()
-            .and_then(|edid| refresh_of(edid, width, height)),
+    // EDID 只在有模式时才读：读它是为了给这个模式配刷新率与物理尺寸，
+    // 没有模式时它给不出任何东西，而多读一个可能没权限的文件只会多一种失败。
+    let edid = match mode {
+        Some(_) => read::bytes(&path_of(connector, "edid"))?,
         None => None,
     };
+    let edid = edid.as_deref();
 
-    let mut value = match mode {
+    Ok(Some(Facts {
+        connector: connector.name.clone(),
+        builtin: is_builtin(&connector.name),
+        mode,
+        // 刷新率只在 EDID 的首选时序与 `modes` 第一行对得上时才用。
+        refresh_hz: match (mode, edid) {
+            (Some((width, height)), Some(edid)) => refresh_exact(edid, width, height),
+            _ => None,
+        },
+        edid_name: edid.and_then(name_of),
+        physical_mm: edid.and_then(physical_size_mm),
+    }))
+}
+
+fn describe(connector: &Connector, module: &'static str) -> Result<Option<Info>, CollectError> {
+    let Some(facts) = facts(connector)? else {
+        return Ok(None);
+    };
+
+    let mut value = match facts.mode {
         Some((width, height)) => format!("{width}x{height}"),
         // 极少数连接器有状态却没报模式，这时至少让人看见它接着东西。
         None => "Connected".to_owned(),
     };
-    if let Some(refresh) = refresh {
+    // `Display` 印整数赫兹：EDID 的时钟是 10 kHz 量化的，多给三位小数是假精度。
+    if let Some(refresh) = facts.refresh_hz.map(|hz| hz.round() as u32) {
         value.push_str(&format!(" @ {refresh}Hz"));
     }
-    value.push_str(if is_builtin(&connector.name) {
+    value.push_str(if facts.builtin {
         " (Built-in)"
     } else {
         " (External)"
     });
 
-    let mut info = Info::new(module, format!("Display ({})", connector.name), value)
-        .with_variable("connector", connector.name.clone());
-    if let Some((width, height)) = mode {
+    let mut info = Info::new(module, format!("Display ({})", facts.connector), value)
+        .with_variable("connector", facts.connector.clone());
+    if let Some((width, height)) = facts.mode {
         info = info
             .with_variable("width", width.to_string())
             .with_variable("height", height.to_string());
     }
-    if let Some(refresh) = refresh {
+    if let Some(refresh) = facts.refresh_hz.map(|hz| hz.round() as u32) {
         info = info.with_variable("refresh", refresh.to_string());
     }
 
@@ -154,67 +195,41 @@ fn parse_mode(mode: &str) -> Option<(u32, u32)> {
     Some((width.parse().ok()?, height.parse().ok()?))
 }
 
-/// 从 EDID 里算出这个分辨率的刷新率。
-///
-/// 只认**头一个** detailed timing descriptor（偏移 54，长 18 字节）：它描述的就是
-/// 显示器的首选时序。像素时钟字段为 0 表示这一格是空的。
-///
-///   - 偏移 0..2：像素时钟，单位 10 kHz，小端
-///   - 偏移 2/3：水平有效像素、水平消隐的低 8 位
-///   - 偏移 4：高 4 位是水平有效像素的高 4 位，低 4 位是水平消隐的高 4 位
-///   - 偏移 5/6、7：垂直方向同上
-///
-/// 刷新率 = 像素时钟 / (行总数 × 场总数)。算出来的分辨率与 `modes` 里的对不上就
-/// 返回 `None`——那说明这个 descriptor 描述的不是当前这个模式。
-fn refresh_of(edid: &[u8], width: u32, height: u32) -> Option<u32> {
-    // 四舍五入到整数赫兹：EDID 里的时钟是 10 kHz 量化的，本来就不是精确值。
-    let refresh = refresh_exact(edid, width, height)?.round();
-
-    (refresh > 0.0 && refresh < 1000.0).then_some(refresh as u32)
-}
-
-/// 与 [`refresh_of`] 同一份计算，但**不四舍五入**。
+/// 精确刷新率，**不四舍五入**。
 ///
 /// 同一个数有两种用法：`Display` 印 `120 Hz`（人看的一行），`Monitor` 印 `120.001`
 /// （fastfetch 的口径，真机比对过）。取数层给精确值，怎么舍由各自的渲染决定——
-/// 所以这里不重复解析，只把最后的 `.round()` 留在上面那层。
+/// 所以这里不重复解析，只把 `.round()` 留给调用方。
 pub(crate) fn refresh_exact(edid: &[u8], width: u32, height: u32) -> Option<f64> {
-    #[allow(clippy::items_after_statements)]
-    {
-        /// detailed timing descriptor 在 EDID 里的偏移与长度。
-        const DTD_OFFSET: usize = 54;
-        const DTD_LEN: usize = 18;
+    /// detailed timing descriptor 在 EDID 里的偏移与长度。
+    const DTD_OFFSET: usize = 54;
+    const DTD_LEN: usize = 18;
 
-        let dtd = edid.get(DTD_OFFSET..DTD_OFFSET + DTD_LEN)?;
+    let dtd = edid.get(DTD_OFFSET..DTD_OFFSET + DTD_LEN)?;
 
-        let pixel_clock = u32::from(u16::from_le_bytes([dtd[0], dtd[1]])) * 10_000;
-        if pixel_clock == 0 {
-            return None;
-        }
-
-        let active_width = u32::from(dtd[2]) | (u32::from(dtd[4] & 0xf0) << 4);
-        let blank_width = u32::from(dtd[3]) | (u32::from(dtd[4] & 0x0f) << 8);
-        let active_height = u32::from(dtd[5]) | (u32::from(dtd[7] & 0xf0) << 4);
-        let blank_height = u32::from(dtd[6]) | (u32::from(dtd[7] & 0x0f) << 8);
-
-        if (active_width, active_height) != (width, height) {
-            return None;
-        }
-
-        let pixels = u32::checked_mul(active_width + blank_width, active_height + blank_height)?;
-        if pixels == 0 {
-            return None;
-        }
-
-        let refresh = f64::from(pixel_clock) / f64::from(pixels);
-        (refresh > 0.0 && refresh < 1000.0).then_some(refresh)
+    let pixel_clock = u32::from(u16::from_le_bytes([dtd[0], dtd[1]])) * 10_000;
+    if pixel_clock == 0 {
+        return None;
     }
+
+    let active_width = u32::from(dtd[2]) | (u32::from(dtd[4] & 0xf0) << 4);
+    let blank_width = u32::from(dtd[3]) | (u32::from(dtd[4] & 0x0f) << 8);
+    let active_height = u32::from(dtd[5]) | (u32::from(dtd[7] & 0xf0) << 4);
+    let blank_height = u32::from(dtd[6]) | (u32::from(dtd[7] & 0x0f) << 8);
+
+    if (active_width, active_height) != (width, height) {
+        return None;
+    }
+
+    let pixels = u32::checked_mul(active_width + blank_width, active_height + blank_height)?;
+    if pixels == 0 {
+        return None;
+    }
+
+    let refresh = f64::from(pixel_clock) / f64::from(pixels);
+    (refresh > 0.0 && refresh < 1000.0).then_some(refresh)
 }
 
-// 这两个解析是 `Monitor` 的前置：`display.rs` 已经读了 EDID，`Monitor` 要的是同一份
-// 数据（名字与物理尺寸）。**`monitor` 接上时把这两行 `#[allow(dead_code)]` 删掉**——
-// 现在留着它只是因为那个模块还没落地，不是打算长期不用。
-#[allow(dead_code)]
 /// EDID 的**厂商字母 + 产品码**，例如 `SDC4197`。
 ///
 /// 这不是那个 `00 00 00 FC` 的「显示器名描述符」——本机的 EDID 里根本没有那一段
@@ -242,10 +257,6 @@ pub(crate) fn name_of(edid: &[u8]) -> Option<String> {
     Some(format!("{letters}{product:04X}"))
 }
 
-// 这两个解析是 `Monitor` 的前置：`display.rs` 已经读了 EDID，`Monitor` 要的是同一份
-// 数据（名字与物理尺寸）。**`monitor` 接上时把这两行 `#[allow(dead_code)]` 删掉**——
-// 现在留着它只是因为那个模块还没落地，不是打算长期不用。
-#[allow(dead_code)]
 /// 屏幕物理尺寸（毫米），来自 EDID 基础显示参数里的**厘米**字段（偏移 21、22）再乘 10。
 ///
 /// 为什么不取详细时序描述符里那对毫米（偏移 54+12/13）：本机 DTD 写的是 `302x189`，
@@ -312,12 +323,17 @@ mod tests {
         edid
     }
 
+    /// `Display` 那条的舍法：四舍五入到整数赫兹。
+    fn rounded(edid: &[u8], width: u32, height: u32) -> Option<u32> {
+        refresh_exact(edid, width, height).map(|hz| hz.round() as u32)
+    }
+
     #[test]
     fn reads_the_refresh_rate_out_of_a_real_shaped_edid() {
         // 64_299 × 10 kHz / (2928 × 1830) ≈ 120.0 Hz。
         let edid = edid_with(64_299, 2880, 1800);
 
-        assert_eq!(refresh_of(&edid, 2880, 1800), Some(120));
+        assert_eq!(rounded(&edid, 2880, 1800), Some(120));
     }
 
     #[test]
@@ -332,7 +348,7 @@ mod tests {
         let exact = refresh_exact(&edid, 2880, 1800).unwrap();
 
         assert_eq!(format!("{exact:.3}"), "120.001");
-        assert_eq!(refresh_of(&edid, 2880, 1800), Some(120), "显示那条仍是整数");
+        assert_eq!(rounded(&edid, 2880, 1800), Some(120), "显示那条仍是整数");
     }
 
     #[test]
@@ -373,14 +389,14 @@ mod tests {
         let edid = edid_with(64_299, 2880, 1800);
 
         // 同一个 EDID 换个分辨率问，答不上来——宁可少一个数，不能标错。
-        assert_eq!(refresh_of(&edid, 1920, 1080), None);
+        assert_eq!(rounded(&edid, 1920, 1080), None);
     }
 
     #[test]
     fn malformed_edids_are_no_data() {
-        assert_eq!(refresh_of(&[], 2880, 1800), None, "太短");
+        assert_eq!(rounded(&[], 2880, 1800), None, "太短");
         assert_eq!(
-            refresh_of(&edid_with(0, 2880, 1800), 2880, 1800),
+            rounded(&edid_with(0, 2880, 1800), 2880, 1800),
             None,
             "像素时钟为 0 表示这一格是空的"
         );
