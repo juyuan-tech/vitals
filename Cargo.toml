@@ -16,3 +16,5 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.6", features = ["derive"] }
+# 只给错误类型用：编译期展开的 proc-macro，零运行时开销。
+thiserror = "2"
