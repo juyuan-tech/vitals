@@ -344,6 +344,39 @@ Cursor:Terminal:TerminalFont:CPU:GPU:Memory:Swap:Disk:LocalIp:Battery:PowerAdapt
 3. `Command`（跑自定义脚本）与 `Custom`（自定义字符串）是**用户内容**不是系统信息；
    `Command` 要开子进程，与「零子进程」原则冲突，单独评估。
 
+### 5.6 fastfetch 的输出格式参考（本机实测，写新模块前先看这里）
+
+`fastfetch -s sound:datetime:users:physicaldisk:physicalmemory:localip:bootmgr:terminaltheme:cpucache:lm --pipe`
+在本机（AMD 笔记本 + Arch）的原样输出。**这些是权威格式，别自己发明键名与值的样子**：
+
+```text
+Sound: Ryzen HD Audio Controller Speaker (70%)
+Date & Time: 2026-09-13 16:07:54
+Users: gxyarch - login time 2026-09-12 10:56:19
+Physical Disk (Kingston DataTraveler 3.0): 57.67 GiB [HDD, Removable]
+Physical Disk (SAMSUNG MZVL21T0HCLR-00BH1): 953.87 GiB [SSD, Fixed]
+Physical Disk (zram0): 15.33 GiB [Virtual, Fixed]
+Local IP (enp5s0f4u1u3c2): 192.168.1.101/24
+Boot Manager: ARCH - grubx64.efi
+CPU Cache (L1): 8x32.00 KiB (D), 8x32.00 KiB (I)
+CPU Cache (L2): 8x1.00 MiB (U)
+CPU Cache (L3): 16.00 MiB (U)
+Login Manager: login
+```
+
+读出来的几条约定：型号 / 网卡名 / 缓存层级都进**键**的括号；容量两位小数；`Physical Disk`
+的值带 `[介质, 固定性]` 且 **`zram0` 也算一张盘**（`Virtual`），但 `loop`/`dm` 不显示；
+`Local IP` 的值是 CIDR（带前缀长度）；`Users` 带登录时间；`Boot Manager` 是
+`<EFI 启动项描述> - <加载器文件名>`。
+
+**一处我们做不到的**：`Sound` 的值里那个设备名与音量百分比来自 PipeWire/PulseAudio 的协议
+（守护进程里），零子进程拿不到；我们报服务本身 + 版本 + 声卡名（放 `variables`），
+理由写在 `sound.rs` 顶部。
+
+**一处待修的**：包数据库给的版本带 pacman 的 epoch（`PipeWire 1:1.6.8-1` 里的 `1:`）。
+项目自己的版本是 `1.6.8`，epoch 只是打包排序用的。`pkgdb::version_of` 应该把 epoch 前缀去掉
+（`-pkgrel` 保留，与本机已有的 `Niri 26.04-1` 一致）。
+
 **做得比 fastfetch 好的地方**（这是目标，不是口号）：
 
 1. **核心三十多个模块零子进程**：fastfetch 为拿终端名、字体、主题会起不少进程。
