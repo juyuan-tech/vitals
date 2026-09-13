@@ -1,0 +1,440 @@
+# Vitals 开发计划（修订版）
+
+> 本文件在原始计划基础上修订。所有「替换/新增」都标注了依据；**实测**字样表示我在本机验证过，
+> 不是印象。原文十章的结构保留，章内做了增删。
+
+---
+
+## §0 变更记录：被替换掉的过时做法
+
+| # | 原计划写法 | 问题 | 改为 | 依据 |
+|---|---|---|---|---|
+| 1 | 「他人可 `cargo install vitals`」 | crate 名已定 `vitals-rs`，命令本身对不上 | `cargo install vitals-rs`（装出来仍是 `vitals`） | 实测：crates.io 上 `vitals` 被 robopoker 的 telemetry 库占用（1.2.0、106 下载、09-06 更新），`vitals-rs` 空闲 |
+| 2 | 阶段 10 手写 README/Release/二进制 | 手搓 GitHub Actions 是 2022 年的做法 | `cargo-dist` 0.32.0：一条命令生成跨平台产物 + shell/pwsh 安装器 + Homebrew/MSI + binstall 元数据 | crates.io：cargo-dist 0.32.0 |
+| 3 | 阶段 9「快照测试」未指定工具 | 手写 expect 文件难维护 | `insta` 1.48.0（`cargo insta review` 工作流） | crates.io：insta 1.48.0 |
+| 4 | 配置路径写死 `~/.config/vitals/` | 无视 XDG 规范 | 读 `$XDG_CONFIG_HOME`，回退 `~/.config`；用 `etcetera` 0.11.0 | crates.io：etcetera 0.11.0 |
+| 5 | `--no-color` + 手写 ANSI | 管道里仍会吐转义码，需用户手动干预 | `anstyle` 1.0.14 + `anstream` 1.0.0：非 TTY 自动降级，并遵循 `NO_COLOR` / `CLICOLOR_FORCE` | crates.io：anstyle 1.0.14 / anstream 1.0.0 |
+| 6 | 「对齐必须用 Unicode 显示宽度」但未指定 | 教程多为 0.1 写法，0.2 是破坏性变更 | `unicode-width` 0.2.2；`char::width()` 现返回 `Option<usize>` | 实测：`"a\u{0301}b"` → bytes=4 / chars=3 / **display=2**；`'a'.width()` = `Some(1)` |
+| 7 | 阶段 8「模块并行采集」未指定手段 | 容易顺手引 rayon | `std::thread::scope`（1.63 起稳定），一次性 CLI 无需线程池 | std 稳定特性 |
+| 8 | 「外部命令带超时」未指定实现 | **std 没有这个 API** | 自写 `try_wait` + deadline 轮询（零依赖，推荐）；备选 `wait-timeout` 0.2.1 | 实测：stable 1.98.1 编译 `child.wait_timeout(..)` → `error[E0599] no method named wait_timeout` |
+| 9 | 「禁止 unsafe」+ 需要 `statvfs`/`uname` | 二者直接冲突，会卡住 Disk/Kernel 模块 | 自有代码零 unsafe，系统调用一律经 `rustix` 1.1.4 | 实测：`rustix::fs::statvfs("/")` 与 `rustix::system::uname()` 编译运行通过，用户代码无 unsafe |
+| 10 | 「能用系统信息库就用库」 | 与阶段 8 的 <20ms 冷启动冲突；`sysinfo` 重且 CPU 占用率必须两次采样 | 反转默认：**优先直读 `/proc`、`/sys`、`/etc`**；系统调用走 rustix；确需才引 `sysinfo` | 见 §3、§5 |
+| 11 | 里程碑表与开发阶段表 | **两套切片互不兼容**：里程碑把 JSON/Logo 放 v0.3、条件放 v0.2；开发顺序却在第 7、8 步就做 Logo/JSON，第 9 步才做条件，且 v0.1 直接吞掉了全部内容 | 以**阶段**为唯一真源，里程碑由阶段边界重新推导 | 见 §7、§8 |
+| 12 | 阶段 2 验收「`vitals --gen-config` 可输出」 | 验收依赖阶段 3 才有的 CLI | 阶段 2 验收改为 `cargo test` + 最小 `cargo run -- --gen-config` | 依赖倒置 |
+| 13 | 只有 `[[bin]]`，没有 lib | 集成测试、快照测试无法复用内部结构 | `src/lib.rs` + 薄 `src/main.rs` 双 target | 见 §2.6 |
+| 14 | 默认「用户配置覆盖默认值」但没定工具链 | 本机 rustup 默认是 nightly | 写 `rust-version`，加 `rust-toolchain.toml` 锁 stable，日常 `cargo +stable` 验证 | 实测：本机默认 nightly 1.100.0；stable 1.98.1；另有 1.97.1 |
+| 15 | 公网 IP / 网络模块未定依赖形态 | 会拉进 TLS 栈 + 联网，与体积、冷启动、默认隐私冲突 | 做成 Cargo feature（`net`，默认关），模块也默认关 | 阻塞式 `ureq` 3.4.1 可用，但体积代价必须可选 |
+| 16 | 包管理器计数写 `pacman / dpkg / rpm`（暗示开子进程） | 违反自己「能读文件就不开子进程」的原则 | 数 `/var/lib/pacman/local` 目录项、解析 `/var/lib/dpkg/status`；rpm 库格式复杂，退回 `rpm -qa` | 见 §5.2 |
+| 17 | `when-command-exists` 未定实现 | 若真去执行命令，既慢又有副作用 | 只做 PATH 查找，**绝不执行** | 见 §2.5 |
+| 18 | JSONC 兼容被当作「fastfetch 迁移预留」 | 格式兼容 ≠ schema 兼容，fastfetch 的 `modules` 结构与本计划不同 | 明确 JSONC 只是「带注释的另一种写法」；fastfetch schema 适配列为 v0.6 独立条目，且要求模块类型名刻意对齐 | 见 §2.2 |
+| 19 | 文件布局未规定，目录模块会顺手写成 `foo/mod.rs` | `mod.rs` 是 Rust 2018 之前的旧写法；同仓库多个 `mod.rs` 在标签页/搜索/diff 里无法区分 | 一律自名文件 + 同名目录（`collectors.rs` + `collectors/`），禁止 `mod.rs`；并用 `#![warn(clippy::mod_module_files)]` 在 CI 里钉死 | 实测：clippy 0.1.100 报 `` `mod.rs` files are not allowed `` + `` move `src/foo/mod.rs` to `src/foo.rs` ``；该 lint 属 restriction 组、默认关闭 |
+
+---
+
+## 一、项目定位
+
+- 项目名：**Vitals**
+- 命令名：`vitals`
+- crate 名：`vitals-rs`（`vitals` 已被占用，见 §0-1），二进制名仍为 `vitals`
+- 标语：*Your system's vital signs, at a glance.*
+- 定位：系统信息采集与展示工具，类 fastfetch / neofetch
+- 语言：Rust，edition 2024，MSRV 1.85，`rust-version = "1.85"`
+- 平台：Linux 优先，架构预留跨平台（见 §2.7）
+- 配置路径：`$XDG_CONFIG_HOME/vitals/config.toml`，未设置时回退 `~/.config/vitals/config.toml`
+- 配置格式：TOML 为主，JSONC 为兼容，JSON 为输出
+- 动态配置：明确排除，不做脚本引擎
+- 输出：终端彩色 + JSON
+- 许可证：MIT OR Apache-2.0（Rust 生态惯例）
+
+**工具链纪律**：本机 rustup 默认是 nightly，而本 crate 要发给 stable 用户。因此仓库加
+`rust-toolchain.toml`（`channel = "stable"`），CI 与本地都以 stable 为准；nightly 只在需要
+`cargo +nightly fmt` 之类时显式调用。
+
+---
+
+## 二、技术决策
+
+### 2.1 依赖清单（按阶段引入，不一次性定死）
+
+| 依赖 | 版本 | 引入阶段 | 用途 |
+|---|---|---|---|
+| `clap` | 4.6（derive） | 3 | CLI 解析 |
+| `serde` + `serde_json` | 1 / 1 | 2、6 | 配置与 JSON 输出 |
+| `toml` | 1.1 | 2 | 主配置解析/生成（注意：生态里大量教程仍是 0.8 写法） |
+| `jsonc-parser` | 0.33 | 2（feature `jsonc`） | JSONC 兼容 |
+| `etcetera` | 0.11 | 2 | XDG 路径解析 |
+| `anstyle` + `anstream` | 1.0 / 1.0 | 5 | 颜色与非 TTY 自动降级 |
+| `unicode-width` | 0.2.2 | 5 | 显示宽度对齐 |
+| `rustix` | 1.1（features `fs`, `system`） | 4 | `statvfs`、`uname` 等系统调用的安全封装 |
+| `insta` | 1.48（dev） | 11 | 渲染快照测试 |
+| `ureq` | 3.4（feature `net`，默认关） | 8 | 唯一的联网模块（公网 IP） |
+
+**明确不引**：`sysinfo`（除非将来确需进程列表）、`rayon` / `crossbeam`、任何 async runtime、
+`inventory` / `linkme`（模块注册用静态数组即可，不要编译期魔法）。
+
+### 2.2 配置语言
+
+- **主配置 TOML**：Rust 生态最好、支持注释、手写友好、无 YAML 隐式类型坑、无 JSON 无注释问题。
+  `toml = "1"`（不是 0.8）。
+- **兼容 JSONC**：仅指**语法**上的「JSON + 注释 + 尾逗号」，用 `jsonc-parser` 解析后映射到同一套内部结构。
+- **输出 JSON**：仅用于 `--json`，不作为手写配置。建议同时带一个输出 schema 版本号。
+- **排除**：YAML、RON、KDL、动态脚本。
+
+> ⚠️ 澄清一个容易自我欺骗的点：**JSONC 兼容 ≠ fastfetch 迁移**。fastfetch 的配置是
+> `modules` 里混放字符串与 `{"type": "cpu"}` 对象，字段名自成一套。要真正「为迁移预留」，
+> 模块类型名与字段名就得刻意对齐它的命名；否则 JSONC 只是「允许注释的另一种写法」。
+> 因此把 **fastfetch schema 适配层**单列为 v0.6 条目，不塞进 JSONC 里假装已经兼容。
+
+### 2.3 配置加载顺序
+
+内置默认 → 用户配置文件（`--config` 或 XDG 默认路径）→ CLI 参数覆盖。
+
+第一版只做「用户配置覆盖默认值」，不做多层系统级合并（`/etc/vitals/` 之类留到 v1.0 再议）。
+
+### 2.4 配置结构原则
+
+- 用数组表保证模块顺序
+- 模块用类型标签区分
+- **未知字段报错**（`#[serde(deny_unknown_fields)]`），避免拼写错误静默通过
+- 带版本字段，为将来迁移留口
+- 每个模块可带声明式条件字段
+
+### 2.5 声明式条件
+
+模块可声明：
+
+- `platforms`：限定平台，如只跑 `linux`
+- `when-command-exists`：命令不存在则跳过
+- `when-file-exists`：路径不存在则跳过
+
+**实现要点**：`when-command-exists` 只做 **PATH 查找**，绝不真的执行命令——否则「判断有没有
+nvidia-smi」本身就要起一个进程。主流程在调度前统一评估，任一不满足则跳过该模块，不报错。
+
+### 2.6 格式化与错误处理
+
+- **格式化**：极简模板替换，不引入脚本引擎。模块采集时填充变量，渲染时按模板替换。
+  语法限定为 `{var}` 一种；缺失变量的行为由配置决定（`keep` 保留原样 / `empty` 替换为空），
+  默认 `keep`，便于发现拼写错误。
+- **错误类型**：模块内部用 `thiserror` 定义具体错误；主流程用统一错误类型汇聚。
+- **单模块失败不影响整体**：打印警告到 stderr 后继续；`--verbose` 显示原因。
+- **外部命令**：一律带超时；非零退出码按失败处理。
+- **文件不存在**：返回「无数据」，不报错。
+- **禁止 unsafe**：`#![forbid(unsafe_code)]` 放在 `src/lib.rs` 顶部。系统调用（`statvfs`、
+  `uname`、`sysconf`）一律经 `rustix` 的安全封装——**已实测可行**。
+  注意 `forbid(unsafe_code)` 只覆盖本 crate 自有代码，依赖内部（含 rustix）不可避免有 unsafe，
+  这点要在 README 里说清楚，别承诺做不到的事。
+- **外部命令超时实现**：std **没有** `Child::wait_timeout`（实测 stable 1.98.1 报 E0599）。
+  采用零依赖方案：`thread::scope` 内 `spawn` 子进程 + `try_wait` 轮询到 deadline，
+  超时则 `kill()` 并回收。备选 `wait-timeout` 0.2.1（API 极简但更新停滞）。
+
+### 2.7 双 target 结构（新增）
+
+```
+src/
+  lib.rs              # #![forbid(unsafe_code)] + #![warn(clippy::mod_module_files)] + 模块树
+  main.rs             # 薄壳：解析 CLI → 调 lib
+  collectors.rs       # 模块声明（自名文件，不是 collectors/mod.rs）
+  collectors/         # 每个采集器一个文件：os.rs、kernel.rs、host.rs、cpu.rs …
+  config.rs
+  config/             # 需要展开时才建（如 loader.rs、defaults.rs）
+  render.rs
+  render/             # text.rs、json.rs
+tests/
+  cli.rs              # 集成测试（跑二进制）
+  snapshot.rs         # insta 快照
+```
+
+**模块布局规则：一律「自名文件 + 同名目录」，禁止 `mod.rs`。**
+
+- `collectors.rs` 与 `collectors/` 同级；`collectors/os.rs` 由 `collectors.rs` 里的
+  `pub mod os;` 引入，而不是 `collectors/mod.rs`。
+- Rust 2018 起 rustc **两种布局都接受**，但 `mod.rs` 是旧写法：同一仓库里若干个 `mod.rs`
+  在编辑器标签页、全局搜索、`git diff` 路径里都无法区分，只能靠上一级目录名辨认。
+- 该规则不是编译器强制的，所以用 lint 钉死：`src/lib.rs` 顶部加
+  `#![warn(clippy::mod_module_files)]`。它属 restriction 组、**默认关闭**，不显式开启就永远不生效；
+  一旦开启，CI 的 `cargo clippy -- -D warnings` 会把任何 `mod.rs` 拦成错误。
+- 实测依据：clippy 0.1.100 对该布局报
+  ``warning: `mod.rs` files are not allowed, found `src/foo/mod.rs` `` +
+  ``help: move `src/foo/mod.rs` to `src/foo.rs` ``。
+
+必须有 `lib.rs`：否则阶段 9 的集成测试与快照测试只能黑盒测二进制，无法复用内部结构。
+`cargo install vitals-rs` 仍然正常（bin target 保留）。
+
+### 2.8 跨平台预留的落地方式
+
+不是「写一堆 `#[cfg(windows)]`」，而是：
+
+1. 采集器接口与渲染器接口完全平台无关；
+2. 平台差异收敛到少数几个函数（路径常量、系统调用包装、命令存在性检查）；
+3. Linux 实现放 `platform/linux/`，其他平台留空但接口已定；
+4. 优先用 `rustix` 的 `unix` 抽象而非直接 `libc`，Windows 侧将来对应 `windows-sys`。
+
+---
+
+## 三、核心抽象
+
+四件事先定清楚，后面所有模块都围绕它们：
+
+1. **采集器 `Collector`**
+   - 一个模块一个实现，统一接口
+   - 输入：`&Context`（配置片段、路径解析器、平台信息、超时预算）
+   - 输出：`Result<Info, CollectError>`
+   - 约束：`Send + Sync`（阶段 10 要并行采集）；**只返回数据，绝不打印**
+2. **信息 `Info`**
+   - 显示键、显示值、供模板使用的变量表
+   - JSON 输出直接用它（含类型、键、值）
+3. **模块调度**
+   - 配置里的模块声明 → 映射到采集器 → 评估声明式条件 → 执行 → 收集结果
+   - 条件不满足则跳过（不报错）；采集失败则记录警告并继续
+   - 注册表用静态数组：`const COLLECTORS: &[&dyn Collector]`，用名字线性查找（模块数量级 < 50，无需哈希表）
+4. **渲染器 `Renderer`**
+   - 输入：`Option<&Logo>` + `&[Info]`，输出到指定流
+   - 实现两个：文本渲染器、JSON 渲染器
+
+采集与渲染分离，模块与核心分离。
+
+---
+
+## 四、CLI 设计
+
+| 参数 | 作用 |
+|---|---|
+| 无参数 | 默认渲染 |
+| `--config <path>` | 指定配置文件 |
+| `--json` | JSON 输出，自动关颜色与 Logo |
+| `--logo <auto\|none\|名称>` | Logo 控制 |
+| `--module <列表>` | **过滤**模块，逗号分隔（不改变配置中的顺序） |
+| `--no-color` | 关闭颜色（与 `NO_COLOR` 环境变量等效） |
+| `--list-modules` | 列出可用模块及其平台/条件 |
+| `--gen-config` | 生成默认配置到 stdout |
+| `--verbose` | 显示模块失败原因（stderr） |
+| `--version` / `--help` | 版本 / 帮助 |
+
+- 优先级：CLI 参数 > 配置文件 > 内置默认。
+- `--module` 是**过滤**，不是覆盖：被过滤掉的模块不采集，但配置顺序不变。
+- 颜色由 `anstream` 决定：stdout 不是 TTY 时自动无色，无需用户加参数；`--no-color` 只是显式再确认一次。
+
+---
+
+## 五、模块清单
+
+### 5.1 v0.1 基础模块（十个）
+
+OS、Host、Kernel、Uptime、Shell、User、CPU、Memory、Disk、Rust。
+
+**数据来源（修订后）**：
+
+| 模块 | 来源 | 说明 |
+|---|---|---|
+| OS | `/etc/os-release` | 解析 `ID` / `ID_LIKE` / `PRETTY_NAME` |
+| Host | `/sys/devices/virtual/dmi/id/` | 读不到时回退 `/proc/device-tree/model` |
+| Kernel | `rustix::system::uname()` | 实测可用，零 unsafe |
+| Uptime | `/proc/uptime` | 直读，微秒级 |
+| Shell / User | 环境变量 + `/etc/passwd` | 不 fork |
+| CPU | `/proc/cpuinfo` + `/sys/devices/system/cpu/` | 只做型号与核心数（必要时加频率）；**不做占用率**，理由见 §5.3 |
+| Memory | `/proc/meminfo` | 直读 |
+| Disk | `rustix::fs::statvfs()` + `/proc/mounts` | 实测可用；`statvfs` 才能拿到用量 |
+| Rust | `~/.rustup/settings.toml` 或环境变量 | ⚠️ 见下 |
+
+> ⚠️ **Rust 模块是十个里唯一可能必须开子进程的**：`rustc --version` 无法靠读文件得到确切版本。
+> 两个选择：(a) 只读 `~/.rustup/settings.toml` 的 `default_toolchain` 与环境变量（快，但不精确）；
+> (b) 调 `rustc --version` 并走超时路径（准，但要付进程开销）。**请定一个**，否则实现时会临时拍脑袋。
+
+### 5.2 v0.2 扩展模块（按优先级）
+
+1. **GPU**：`nvidia-smi` 或 `lspci`；声明式条件跳过无 GPU 机器
+2. **网络**：默认路由网卡的 IP
+3. **电池**：`/sys/class/power_supply`，条件跳过台式机
+4. **桌面环境 / WM**：`XDG_CURRENT_DESKTOP`
+5. **终端**：`TERM_PROGRAM` 或 `TERM`
+6. **包管理器计数**：直接数 `/var/lib/pacman/local` 目录项、解析 `/var/lib/dpkg/status` 的
+   `Package:` 行；rpm 的库格式复杂，退回 `rpm -qa | wc -l`（这是唯一例外，需在模块文档里写明理由）
+7. **温度**：`/sys/class/thermal` + `/sys/class/hwmon`
+8. **多挂载点磁盘**
+9. **本地 IP**；公网 IP **默认关闭**（需 `net` feature）
+10. **主题 / 图标 / 字体**：GNOME / KDE
+
+每个模块都走同一套：采集器接口 + 条件评估 + 注册到调度。
+
+### 5.3 不做 CPU 占用率（范围纪律）
+
+**决策：v0.1–v1.0 都不做 CPU 占用率。**
+
+- 占用率是**监视器**（htop / btop / top）的职责，不是 fetch 工具的。fetch 工具给的是
+  「身份与容量快照」，不是实时指标。
+- 算术上的硬约束：`/proc/stat` 是**自开机累计计数器**，单次读取只能得出「开机至今平均占用」；
+  要瞬时值必须两次采样加间隔，这与阶段 10 的「冷启动 < 20ms」直接冲突。
+- 事实核查：fastfetch 确实有独立的 `cpuusage` 模块（`src/modules/cpuusage/`，并被
+  `presets/all.jsonc` 引用），但它的 Linux 实现是**单次读 `/proc/stat`、不 sleep**
+  （`src/detection/cpuusage/cpuusage_linux.c`），所以它报的正是「开机至今平均占用」而非瞬时值。
+  它便宜，是因为它压根没做采样——这种数字对用户没什么价值。
+- 将来若真要做，作为**可选模块**，并在文案上明确标注语义为「开机至今平均」。
+
+CPU 模块只负责：型号、物理/逻辑核心数（必要时加频率）。
+
+---
+
+## 六、渲染设计
+
+### 6.1 文本渲染
+
+- Logo 在左，信息在右，垂直居中
+- 键右对齐、值左对齐
+- 终端宽度自适应；宽度不足时自动隐藏 Logo
+- 颜色：键一种色、值一种色、Logo 按发行版配色；由 `anstyle` 定义样式、`anstream` 负责降级
+- **对齐必须用显示宽度**，不能用字节长度也不能用 `chars().count()`。实测示例：
+  `"a\u{0301}b"` 的 `len()` = 4、`chars().count()` = 3、`unicode_width` 宽度 = **2**。
+  三个数各不相同，只有第三个是对的。
+- `unicode-width` 用 **0.2.2**：`str::width() -> usize`，但 `char::width() -> Option<usize>`
+  （0.1 返回 `usize`），照旧教程写会编译不过。
+
+### 6.2 Logo
+
+- 内置常见发行版 ASCII Logo，`include_str!` **编译期嵌入**，不读磁盘
+- `logo = "auto"` 时匹配链：`/etc/os-release` 的 `ID` → `ID_LIKE` → 通用 Linux Logo
+  （**必须带 `ID_LIKE` 回退**，否则 cachyos、endeavouros 这类衍生版全掉到通用 Logo）
+- 找不到时用通用 Linux Logo
+
+### 6.3 JSON 渲染
+
+- 输出结构化信息列表，含类型、键、值
+- 带输出 schema 版本号
+- 自动关闭颜色与 Logo；`vitals --json | jq` 必须可用
+
+---
+
+## 七、开发阶段
+
+> **以本节为唯一真源**，§8 的里程碑由阶段边界推导。
+
+### 阶段 0：项目初始化
+- **目标**：能运行的空壳
+- **任务**：`cargo new`；lib + bin 双 target；`rust-toolchain.toml` + `rust-version`；许可证与
+  `Cargo.toml` 元数据（含 `[[bin]] name = "vitals"`）；CI 骨架（fmt / clippy / nextest 三件套）
+- **验收**：`cargo run -- --version` 输出 `vitals 0.1.0`；`cargo +stable build` 通过；
+  `cargo fmt --check` 与 `cargo clippy -- -D warnings` 全绿
+
+### 阶段 1：核心抽象
+- **目标**：定接口，不写实现
+- **任务**：确定采集器接口、信息结构、模块调度流程、渲染器接口；只定义，编译通过
+- **验收**：用一个假采集器跑通「采集 → 渲染」
+
+### 阶段 2：配置系统
+- **目标**：TOML 能加载、能合并、能生成默认
+- **任务**：定义配置结构；实现加载顺序与 XDG 查找；实现生成默认配置；未知字段报错；版本字段
+- **验收**：`cargo test` 覆盖合法/非法配置；最小 `cargo run -- --gen-config` 可输出
+  （不依赖阶段 3 的完整 CLI）
+
+### 阶段 3：CLI
+- **目标**：参数完整、行为可预期
+- **任务**：按 §4 实现全部参数；落实优先级
+- **验收**：所有参数生效，`--help` 可读
+
+### 阶段 4：基础模块
+- **目标**：v0.1 十个模块可用
+- **任务**：逐模块实现，独立文件、独立测试；失败不 panic；外部命令带超时
+- **验收**：干净 Linux 上输出合理，无 panic
+
+### 阶段 5：渲染（文本）
+- **目标**：好看
+- **任务**：文本渲染、显示宽度对齐、Logo、颜色（anstyle + anstream）
+- **验收**：`vitals` 好看；管道输出无转义码
+
+### 阶段 6：JSON 输出
+- **任务**：JSON 渲染器 + 输出 schema 版本
+- **验收**：`vitals --json | jq` 可用
+
+### 阶段 7：声明式条件
+- **任务**：`platforms` / `when-command-exists`（仅 PATH 查找）/ `when-file-exists`；调度前统一评估
+- **验收**：伪条件可精确跳过指定模块，且不产生任何子进程
+
+### 阶段 8：扩展模块
+- **任务**：按 §5.2 优先级逐个实现，全部走声明式条件；`net` feature 隔离公网 IP
+- **验收**：无 GPU 机器不显示 GPU；台式机不显示电池
+
+### 阶段 9：健壮性
+- **目标**：任何异常不崩溃
+- **任务**：统一错误类型；单模块失败继续；`--verbose` 显示原因；所有外部命令超时；
+  所有文件读取缺失返回空
+- **验收**：故意破坏配置、删除文件、断命令，程序不 panic
+
+### 阶段 10：性能
+- **目标**：冷启动低于 20ms（不含 Logo 渲染）
+- **任务**：`thread::scope` 并行采集；能读 `/proc` 就不开子进程；外部命令按需调用；
+  用 `hyperfine --warmup 3` 做基准并记录
+- **验收**：`vitals --json` 与 fastfetch 对比不落后
+
+### 阶段 11：测试与 CI
+- **任务**：单元测试用 fixture 测解析；集成测试测 CLI；`insta` 快照测渲染；
+  配置测试覆盖合法与非法
+- **CI 内容**：`cargo fmt --check`、`cargo clippy -D warnings`、`cargo nextest run`、
+  `cargo deny check`（license + advisory + 重复依赖）；v1.0 冻结接口时再加 `cargo semver-checks`
+- **验收**：CI 全绿
+
+### 阶段 12：发布
+- **任务**：README、LICENSE、CHANGELOG、配置文档、模块文档；`cargo-dist` 初始化并发布到 crates.io；
+  GitHub Release 附二进制与安装器；加 `[package.metadata.binstall]` 支持 `cargo binstall`；
+  后期考虑 AUR、Homebrew
+- **验收**：他人 `cargo install vitals-rs`（或 `cargo binstall vitals-rs`）后可直接使用命令 `vitals`
+
+---
+
+## 八、里程碑（由阶段边界推导，替换原表）
+
+| 版本 | 内容 | 对应阶段 | 可发布 |
+|---|---|---|---|
+| v0.1 | 十个基础模块 + TOML 配置 + CLI + 文本渲染 | 0–5 | 是 |
+| v0.2 | JSON 输出 + 声明式条件 + 扩展模块 | 6–8 | 是 |
+| v0.3 | 健壮性（统一错误、无 panic） | 9 | 是 |
+| v0.4 | 并行采集 + 性能达标 | 10 | 是 |
+| v0.5 | 测试 + CI + 打包发布 | 11–12 | 是 |
+| v0.6 | fastfetch schema 适配层（可选） | — | 否 |
+| v1.0 | 接口冻结 + 跨平台预留 | — | 是 |
+
+---
+
+## 九、开发顺序
+
+1. 建项目（lib + bin 双 target、工具链锁定、CI 骨架）
+2. **定义四个核心抽象，只定义不实现** ← 关键，接口定错返工大
+3. 实现 OS、Kernel、Host 三个模块，跑通文本渲染
+4. 加 TOML 配置加载与生成默认
+5. 加 CLI 参数
+6. 补齐十个基础模块
+7. 加 Logo、对齐、颜色
+8. 加 JSON 输出
+9. 加声明式条件
+10. 加扩展模块
+11. 健壮性与性能
+12. 测试与 CI
+13. 发布 v0.1
+
+---
+
+## 十、明确排除的事项
+
+- 不做动态配置脚本（Rhai、Lua 等）
+- 不用 YAML 作主配置
+- 不引入异步运行时
+- 不在模块内直接打印，只返回数据
+- 不因单模块失败中断整体
+- 不用字节长度做对齐（也不用 `chars().count()`，用显示宽度）
+- 不读磁盘加载 Logo
+- 不写 unsafe（自有代码；系统调用一律经 `rustix`）
+- 不引 `sysinfo`（除非将来确需进程列表）、不引 `rayon` / `inventory` / `linkme`
+- 不硬编码 `~/.config`（走 XDG）
+- 不手搓 release workflow（用 `cargo-dist`）
+- 不在「判断命令是否存在」时真的执行命令
+- 不用 `mod.rs`（一律自名文件 + 同名目录，由 `clippy::mod_module_files` 在 CI 里强制）
+
+---
+
+## 附：仍待拍板的两件事
+
+（CPU 占用率已按「不做非必要功能」的原则关闭，见 §5.3。）
+
+1. **Rust 模块是否保留**——它是十个模块里最像「非必要」的一个，而且是唯一可能需要开子进程的
+   （读 `~/.rustup/settings.toml` 快但不精确；执行 `rustc --version` 准但有进程开销）。
+   按范围纪律可以砍；若保留，默认走读文件、不 fork。
+2. **v0.1 是否包含 JSON 输出**——本计划把它放在 v0.2（阶段 6），如果你希望 `--json` 从第一版就能用，
+   就把阶段 6 提前到阶段 5 之前，里程碑也随之调整

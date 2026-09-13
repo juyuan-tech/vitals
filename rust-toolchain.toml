@@ -1,0 +1,6 @@
+# 本机 rustup 默认是 nightly，而本 crate 要发布给 stable 用户。
+# 锁 stable：避免在 nightly 上写爽了、用户编不过。
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
