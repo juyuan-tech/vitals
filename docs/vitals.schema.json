@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/juyuan-tech/vitals/master/docs/vitals.schema.json",
+  "title": "vitals --json output",
+  "description": "The document printed by `vitals --json`. Field names are a contract: within one `schema_version` they do not drift. Adding fields is not a breaking change, so readers should ignore keys they do not recognise; only incompatible changes bump `schema_version`.",
+  "type": "object",
+  "required": ["schema_version", "entries", "failures"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "Version of this shape.",
+      "type": "integer",
+      "const": 1
+    },
+    "entries": {
+      "description": "One item per rendered line, in display order. Layout-only primitives (separator, break, colors) are omitted.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "key", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "description": "Module name, for example \"os\". The title line uses \"title\" and carries an empty key.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Label printed before the colon. Empty for the title line.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The value as printed. Human-readable text, so volatile fields (uptime, memory usage, rates) differ between runs.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "failures": {
+      "description": "Modules whose collection failed. Empty when everything worked; the same failures are also warned about on stderr.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "error"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "description": "Module name exactly as the user wrote it, even when it is not a known module.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Failure reason: the same sentence that is printed on the terminal.",
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

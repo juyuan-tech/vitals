@@ -1,5 +1,27 @@
 # 变更记录
 
+## 0.1.1
+
+两处**行为修正**：
+
+- **`--explain` 与 `--sources` 同时给时，`--sources` 此前被吞掉**。`--help` 里承诺的是
+  「两个都给就先打状态、再打依据」，但代码在 `--explain` 分支直接返回，依据报告从来不打印。
+  现在两份报告都会输出。
+- **`-h` 的首行标语改成中文**「你的系统生命体征，一眼看全。」，与 `--help` 首行一致
+  （此前一个是英文、一个是中文）。
+
+以下是本次的文档补全，不涉及其它行为：
+
+- 新增参考文档：`docs/modules.md`（61 个模块逐条，含 `--sources` 实测的读取文件）、
+  `docs/configuration.md`（逐键 + 真实运行依据）、`docs/cli.md`、`docs/json.md` 与
+  `docs/vitals.schema.json`（JSON Schema）、`docs/faq.md`、`docs/logo.md`。
+- 新增 `README.en.md`（英文版）；README 补了安装前置、真实默认视图、文档索引与常见问题入口。
+- 新增社区文件：`CONTRIBUTING.md`、`SECURITY.md`、`CODE_OF_CONDUCT.md`、
+  `.github/ISSUE_TEMPLATE/`、`.github/pull_request_template.md`。
+- **修正 README 里与真实输出不符的示例**：`--explain` 的四态示例（原示例里的 `camera 跳过`
+  在本机其实不成立）、`--sources` 的路径顺序、默认视图若干字段的格式；并删掉了配置示例里
+  并不存在的模块名 `pci`。
+
 0.x 期间每个小版本都可能带来行为变化；这是第一个版本。
 
 ## 0.1.0
