@@ -39,9 +39,7 @@ impl Collector for Camera {
         Ok(names
             .into_iter()
             .enumerate()
-            .map(|(index, name)| {
-                Info::new(self.name(), key(index, total), name)
-            })
+            .map(|(index, name)| Info::new(self.name(), key(index, total), name))
             .collect())
     }
 }

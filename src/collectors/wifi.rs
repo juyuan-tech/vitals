@@ -142,11 +142,7 @@ fn parse_stats(text: &str) -> Vec<Stat> {
         let mut fields = rest.split_whitespace();
         let _status = fields.next();
         // 质量是个非负计数；负数（内核不会给，但别信内核）当解析失败跳过。
-        let Some(quality) = fields
-            .next()
-            .and_then(number)
-            .filter(|value| *value >= 0)
-        else {
+        let Some(quality) = fields.next().and_then(number).filter(|value| *value >= 0) else {
             continue;
         };
         let Some(level) = fields.next().and_then(number) else {
@@ -165,7 +161,11 @@ fn parse_stats(text: &str) -> Vec<Stat> {
 
 /// 解一个内核打的浮点列：`70.` → 70、`-40.` → -40。
 fn number(field: &str) -> Option<i32> {
-    field.trim_end_matches('.').parse::<f64>().ok().map(|value| value as i32)
+    field
+        .trim_end_matches('.')
+        .parse::<f64>()
+        .ok()
+        .map(|value| value as i32)
 }
 
 #[cfg(test)]

@@ -44,7 +44,28 @@ fn from_pacman_dir(entry: &str, package: &str) -> Option<String> {
     let rest = entry.strip_prefix(package)?.strip_prefix('-')?;
 
     rest.starts_with(|first: char| first.is_ascii_digit())
-        .then(|| rest.to_owned())
+        .then(|| strip_epoch(rest).to_owned())
+}
+
+/// 去掉版本号里的 epoch 前缀：`2:7.1-3` → `7.1-3`、`1:1.6.8-1` → `1.6.8-1`。
+///
+/// epoch 是包管理器自己的**排序装置**（用来让某个版本永远排在新版本之后），
+/// 不是上游项目版本号的一部分：`pipewire --version` 打的是 `1.6.8`，
+/// 而 pacman 打的是 `1:1.6.8-1`。显示给用户看的版本号按上游口径走，
+/// 这条定在 `PLAN.md` §5.6。发布号（`-1`、`-3`）保留，因为它是上游版本号的
+/// 组成部分，pacman 与 apt 都把它算在版本里。
+///
+/// 只在冒号前面全是数字时才剥（`2:` 是 epoch，`CST-8` 这种不是）。
+/// Debian 的 `/var/lib/dpkg/status` 同样会用 epoch（`1:2.3-4`），一起处理。
+fn strip_epoch(version: &str) -> &str {
+    match version.split_once(':') {
+        Some((epoch, rest))
+            if !epoch.is_empty() && epoch.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            rest
+        }
+        _ => version,
+    }
 }
 
 /// 在 `/var/lib/dpkg/status` 里找包版本。
@@ -64,7 +85,7 @@ fn from_dpkg(text: &str, package: &str) -> Option<String> {
             current = Some(name.trim());
         } else if let Some(version) = line.strip_prefix("Version:") {
             if current == Some(package) {
-                let version = version.trim();
+                let version = strip_epoch(version.trim());
                 if !version.is_empty() {
                     return Some(version.to_owned());
                 }
@@ -261,11 +282,26 @@ mod tests {
             from_pacman_dir("systemd-261.3-1", "systemd").as_deref(),
             Some("261.3-1")
         );
-        // 带 epoch 的版本号。
+        // 带 epoch 的版本号：epoch 是包管理器的排序装置，对外显示要剥掉（PLAN §5.6）。
         assert_eq!(
             from_pacman_dir("ffmpeg-2:7.1-3", "ffmpeg").as_deref(),
-            Some("2:7.1-3")
+            Some("7.1-3")
         );
+        assert_eq!(
+            from_pacman_dir("pipewire-1:1.6.8-1", "pipewire").as_deref(),
+            Some("1.6.8-1")
+        );
+    }
+
+    #[test]
+    fn strips_only_a_numeric_epoch() {
+        // 冒号前全是数字才算 epoch；`CST-8`、`a:b` 这种原样保留。
+        assert_eq!(strip_epoch("2:7.1-3"), "7.1-3");
+        assert_eq!(strip_epoch("7.1-3"), "7.1-3");
+        assert_eq!(strip_epoch("CST-8"), "CST-8");
+        assert_eq!(strip_epoch(":7.1"), ":7.1");
+        assert_eq!(strip_epoch("a:b"), "a:b");
+        assert_eq!(strip_epoch("1:"), "");
     }
 
     #[test]

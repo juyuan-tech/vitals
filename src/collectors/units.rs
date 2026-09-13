@@ -3,23 +3,17 @@
 //! 只在**采集侧**用。`Info::value` 必须是已经能直接显示的文本——
 //! 渲染器看到的只有字符串，它不做数值格式化，也不该做。
 
-/// 把字节数写成 `15.6 GiB`。
+/// 把字节数写成 `15.60 GiB`。
 ///
 /// 用 1024 进制（GiB 而不是 GB）：这是内核和 `free`/`df -h` 的口径，
 /// 系统信息工具跟着它走，免得和用户 `df -h` 看到的数字对不上。
+///
+/// **两位小数与 fastfetch 一致**。这一条是后来改的：一开始我们印一位（`15.6 GiB`），
+/// 理由是更干净；但那样「和参考输出 diff」这条最有力的验收手段就用不上——
+/// `Physical Disk`、`Memory`、`BTRFS` 这些行会永远差最后一位。两位小数并不更精确
+/// （`/sys/block/*/size` 本身是整数扇区数），它换来的是**可逐字核对**。
 #[must_use]
 pub fn bytes(bytes: u64) -> String {
-    render(bytes, 1)
-}
-
-/// 把字节数写成 `953.87 GiB`（两位小数）。
-///
-/// 只和 [`bytes`] 差小数位数，所以两条路走同一个 [`render`]。为什么要两位数：
-/// `Physical Disk` 的容量要和 fastfetch 的输出逐字对齐（`57.67 GiB`、`953.87 GiB`），
-/// 而它的小数位数默认就是 2。**不是**「更精确」——`/sys/block/*/size` 本身是整数扇区数，
-/// 两位小数只是显示口径。
-#[must_use]
-pub fn bytes_precise(bytes: u64) -> String {
     render(bytes, 2)
 }
 
@@ -92,21 +86,22 @@ mod tests {
 
     #[test]
     fn byte_counts_switch_units_at_1024() {
-        assert_eq!(bytes(1024), "1.0 KiB");
-        assert_eq!(bytes(1536), "1.5 KiB");
-        assert_eq!(bytes(1024 * 1024), "1.0 MiB");
+        assert_eq!(bytes(1024), "1.00 KiB");
+        assert_eq!(bytes(1536), "1.50 KiB");
+        assert_eq!(bytes(1024 * 1024), "1.00 MiB");
         // 实测这台机器的 MemTotal：32140260 kB
-        assert_eq!(bytes(32_140_260 * 1024), "30.7 GiB");
+        assert_eq!(bytes(32_140_260 * 1024), "30.65 GiB");
     }
 
     #[test]
-    fn the_precise_form_uses_two_decimals() {
+    fn the_real_fastfetch_numbers_come_out_byte_for_byte() {
         // Physical Disk 的三个真实数字（扇区数 × 512）：USB 优盘、NVMe、zram。
-        assert_eq!(bytes_precise(120_938_496 * 512), "57.67 GiB");
-        assert_eq!(bytes_precise(2_000_409_264 * 512), "953.87 GiB");
-        assert_eq!(bytes_precise(32_139_264 * 512), "15.33 GiB");
-        // 小于 1024 时两条路都按字节印，不换算也不补小数。
-        assert_eq!(bytes_precise(512), "512 B");
+        // 这三行与 `fastfetch -s physicaldisk` 的 `diff` 是空的。
+        assert_eq!(bytes(120_938_496 * 512), "57.67 GiB");
+        assert_eq!(bytes(2_000_409_264 * 512), "953.87 GiB");
+        assert_eq!(bytes(32_139_264 * 512), "15.33 GiB");
+        // 小于 1024 时按字节印，不换算也不补小数（fastfetch 也这样）。
+        assert_eq!(bytes(512), "512 B");
     }
 
     #[test]

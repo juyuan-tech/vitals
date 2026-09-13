@@ -152,7 +152,8 @@ fn count_cpus(list: &str) -> u32 {
 
         match part.split_once('-') {
             Some((first, last)) => {
-                let (Ok(first), Ok(last)) = (first.trim().parse::<u32>(), last.trim().parse::<u32>())
+                let (Ok(first), Ok(last)) =
+                    (first.trim().parse::<u32>(), last.trim().parse::<u32>())
                 else {
                     continue;
                 };
@@ -171,7 +172,7 @@ fn count_cpus(list: &str) -> u32 {
     total
 }
 
-/// 按层级归并成 `L1 → 8x32.0 KiB (D), 8x32.0 KiB (I)` 这样的值。
+/// 按层级归并成 `L1 → 8x32.00 KiB (D), 8x32.00 KiB (I)` 这样的值。
 ///
 /// 同一层级里可能既有数据缓存又有指令缓存（x86 的 L1），按 `D`→`I`→`U` 的固定顺序排，
 /// 不跟着目录顺序走。
@@ -179,7 +180,10 @@ fn group(instances: Vec<Instance>, cpus: Option<u32>) -> Vec<(u32, String)> {
     let mut levels: Vec<(u32, Vec<Instance>)> = Vec::new();
 
     for instance in instances {
-        match levels.iter_mut().find(|(level, _)| *level == instance.level) {
+        match levels
+            .iter_mut()
+            .find(|(level, _)| *level == instance.level)
+        {
             Some((_, list)) => list.push(instance),
             None => levels.push((instance.level, vec![instance])),
         }
@@ -202,7 +206,11 @@ fn group(instances: Vec<Instance>, cpus: Option<u32>) -> Vec<(u32, String)> {
 
                     match instances {
                         Some(count) => {
-                            format!("{count}x{} ({})", units::bytes(instance.bytes), instance.kind)
+                            format!(
+                                "{count}x{} ({})",
+                                units::bytes(instance.bytes),
+                                instance.kind
+                            )
                         }
                         None => format!("{} ({})", units::bytes(instance.bytes), instance.kind),
                     }
@@ -273,19 +281,19 @@ mod tests {
         assert_eq!(
             group(instances, Some(16)),
             [
-                (1, "8x32.0 KiB (D), 8x32.0 KiB (I)".to_owned()),
-                (2, "8x1.0 MiB (U)".to_owned()),
-                (3, "16.0 MiB (U)".to_owned()),
+                (1, "8x32.00 KiB (D), 8x32.00 KiB (I)".to_owned()),
+                (2, "8x1.00 MiB (U)".to_owned()),
+                (3, "16.00 MiB (U)".to_owned()),
             ]
         );
     }
 
     #[test]
     fn a_shared_cache_does_not_get_a_one_x() {
-        // L3 被 16 个核共享 → 1 个实例；写 `1x16.0 MiB` 只是噪音。
+        // L3 被 16 个核共享 → 1 个实例；写 `1x16.00 MiB` 只是噪音。
         assert_eq!(
             group(vec![instance(3, 'U', 16 * 1024 * 1024, 16)], Some(16)),
-            [(3, "16.0 MiB (U)".to_owned())]
+            [(3, "16.00 MiB (U)".to_owned())]
         );
     }
 
@@ -294,7 +302,7 @@ mod tests {
         // 读不到 online 就不写倍数，也不猜。
         assert_eq!(
             group(vec![instance(1, 'D', 32 * 1024, 2)], None),
-            [(1, "32.0 KiB (D)".to_owned())]
+            [(1, "32.00 KiB (D)".to_owned())]
         );
     }
 
@@ -307,7 +315,7 @@ mod tests {
 
         assert_eq!(
             group(instances, Some(4)),
-            [(1, "2x32.0 KiB (D), 2x32.0 KiB (I)".to_owned())]
+            [(1, "2x32.00 KiB (D), 2x32.00 KiB (I)".to_owned())]
         );
     }
 
@@ -319,7 +327,11 @@ mod tests {
         for info in &entries {
             assert_eq!(info.module, "cpu-cache");
             assert!(info.key.starts_with("CPU Cache (L"), "实际是 {}", info.key);
-            assert!(info.value.ends_with(')'), "值里该带缓存种类：{}", info.value);
+            assert!(
+                info.value.ends_with(')'),
+                "值里该带缓存种类：{}",
+                info.value
+            );
         }
     }
 }

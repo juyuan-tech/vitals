@@ -306,11 +306,31 @@ pub enum ModuleType {
     PhysicalDisk,
     /// 二级启动器。
     Bootmgr,
+    /// 声音设备（服务端与声卡）。
+    Sound,
+    /// CPU 各级缓存。
+    CpuCache,
+    /// 登录管理器（显示管理器）。
+    Lm,
+    /// BTRFS 文件系统用量。
+    Btrfs,
+    /// 当前日期与时间。
+    ///
+    /// 单独写 `serde(rename)`：kebab-case 会把 `DateTime` 切成 `date-time`，
+    /// 而我们的名字是 `datetime`（一个词，与 fastfetch 的模块名同形）。
+    #[serde(rename = "datetime")]
+    DateTime,
+    /// Wi-Fi 无线网卡。
+    Wifi,
+    /// 摄像头。
+    Camera,
+    /// 键盘。
+    Keyboard,
 }
 
 impl ModuleType {
     /// 全部模块，`--list-modules` 按这个顺序列出。
-    pub const ALL: [Self; 45] = [
+    pub const ALL: [Self; 53] = [
         Self::Os,
         Self::Host,
         Self::Kernel,
@@ -356,6 +376,14 @@ impl ModuleType {
         Self::Users,
         Self::PhysicalDisk,
         Self::Bootmgr,
+        Self::Sound,
+        Self::CpuCache,
+        Self::Lm,
+        Self::Btrfs,
+        Self::DateTime,
+        Self::Wifi,
+        Self::Camera,
+        Self::Keyboard,
     ];
 
     /// 默认视图：**没人写配置时显示这些**，顺序就是显示顺序。
@@ -460,6 +488,14 @@ impl ModuleType {
             Self::Users => "users",
             Self::PhysicalDisk => "physical-disk",
             Self::Bootmgr => "bootmgr",
+            Self::Sound => "sound",
+            Self::CpuCache => "cpu-cache",
+            Self::Lm => "lm",
+            Self::Btrfs => "btrfs",
+            Self::DateTime => "datetime",
+            Self::Wifi => "wifi",
+            Self::Camera => "camera",
+            Self::Keyboard => "keyboard",
         }
     }
 }

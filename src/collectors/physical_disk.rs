@@ -113,7 +113,7 @@ impl Disk {
     /// `953.87 GiB [SSD, Fixed]`。分类与固定性都可能读不到，那时对应那一段省掉，
     /// 只剩容量——容量是唯一必须有的东西。
     fn describe(&self, module: &'static str) -> Info {
-        let mut value = units::bytes_precise(self.size);
+        let mut value = units::bytes(self.size);
 
         let class = self.class;
         let fixedness = self
@@ -328,7 +328,7 @@ mod tests {
         assert_eq!(32_139_264_u64 * SECTOR, 16_455_303_168);
         assert_ne!(32_139_264_u64 * 4096, 16_455_303_168);
 
-        assert_eq!(units::bytes_precise(2_000_409_264 * SECTOR), "953.87 GiB");
+        assert_eq!(units::bytes(2_000_409_264 * SECTOR), "953.87 GiB");
     }
 
     #[test]

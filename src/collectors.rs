@@ -11,6 +11,8 @@
 //! - [`proc_chain`]：顺着父进程链认祖先（Terminal、DE、WM 共用）
 //! - [`ini`]：带 section 的配置文件的解析与查找链
 //!   （WMTheme、Theme、Icons、Font、Cursor 共用）
+//! - [`input`]：`/proc/bus/input/devices` 的解析与设备分类
+//!   （Keyboard、以及将来的 Mouse/Gamepad 共用）
 //! - [`os_release`] / [`accounts`] / [`dmi`] / [`meminfo`] / [`pkgdb`] / [`power_supply`] / [`tty`]：
 //!   被多个模块共用的系统数据源
 //!
@@ -24,9 +26,13 @@ pub mod bios;
 pub mod board;
 pub mod bootmgr;
 pub mod brightness;
+pub mod btrfs;
+pub mod camera;
 pub mod chassis;
 pub mod cpu;
+pub mod cpu_cache;
 pub mod cursor;
+pub mod date_time;
 pub mod de;
 pub mod disk;
 pub mod display;
@@ -40,8 +46,11 @@ pub mod host;
 pub mod icons;
 pub mod ini;
 pub mod init_system;
+pub mod input;
 pub mod kernel;
+pub mod keyboard;
 pub mod line_break;
+pub mod lm;
 pub mod loadavg;
 pub mod local_ip;
 pub mod locale;
@@ -61,6 +70,7 @@ pub mod rust;
 pub mod separator;
 pub mod session;
 pub mod shell;
+pub mod sound;
 pub mod swap;
 pub mod terminal;
 pub mod terminal_font;
@@ -74,6 +84,7 @@ pub mod uptime;
 pub mod user;
 pub mod users;
 pub mod version;
+pub mod wifi;
 pub mod wm;
 pub mod wmtheme;
 
@@ -133,4 +144,12 @@ pub const COLLECTORS: &[&dyn Collector] = &[
     &users::Users,
     &physical_disk::PhysicalDisk,
     &bootmgr::Bootmgr,
+    &sound::Sound,
+    &cpu_cache::CpuCache,
+    &lm::Lm,
+    &btrfs::Btrfs,
+    &date_time::DateTime,
+    &wifi::Wifi,
+    &camera::Camera,
+    &keyboard::Keyboard,
 ];

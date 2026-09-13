@@ -444,6 +444,27 @@ Codec (Decoder): MJPEG, H.264, HEVC / H.265, VP9, AV1
 `zpool` 是另一回事：数据源（`/proc/spl/kstat/zfs/<池>/`）本身可读，但**本机没装 ZFS**，
 写了也验证不了。按「宁可报告做不到，也不许猜着写」的规矩压后，等有 ZFS 的机器再说。
 
+### 5.8 默认视图与 fastfetch 的逐行差异（待逐条裁定）
+
+跑 `vitals --logo none --no-color` 与 `fastfetch --pipe -l none` 对比，53 行差异。
+其中**多数是我们刻意的设计选择**，不是漏做——但既然目标写的是「全面对标并更好」，
+每一条都该有个明确结论（改齐 / 保留并记录），不能含糊。清单：
+
+| # | 差异 | 我们 | fastfetch | 备注 |
+| --- | --- | --- | --- | --- |
+| 1 | 分隔线 | 铺满最宽行（`─`×N） | 固定 `--------------` | 我们的是「按内容自适应」，观感更像现代工具 |
+| 2 | OS | `Arch Linux x86_64` | `Arch Linux` | 我们多带架构 |
+| 3 | Kernel | `Linux 7.2.4-arch1-2` | `7.2.4-arch1-2` | 我们多带 `Linux ` 前缀 |
+| 4 | Uptime | `1d 5h`（紧凑） | `1 day, 5 hours, 31 mins` | 风格不同，不是对错 |
+| 5 | Packages | 少了 appimage、flatpak 计数也不同（3 vs 8） | `3 (appimage), 8 (flatpak), 1042 (pacman)` | **疑似 bug**，要查 `pkgdb` 的分格式计数 |
+| 6 | Display | 键用连接器名（`Display (eDP-1)`），值 `2880x1800 @ 120Hz (Built-in)` | 键用面板型号（`Display (SDC4197)`），值带缩放与尺寸（`@ 1.74x in 14", 120 Hz [Built-in]`） | 面板型号在 EDID 里，我们有 `edid` 的东西吗要查 |
+| 7 | WM | `Niri 26.04-1 (wayland)` | `niri 26.04 (Wayland)` | 它跑二进制拿版本；我们只能读包数据库。**pkgrel（`-1`）要不要也剥掉**（PLAN §5.6 现在写的是保留）——它印 `26.04`，说明上游版本号是剥掉 pkgrel 的那个 |
+| 8 | Memory | `19.56 GiB / 30.65 GiB (64%)` | `19.55 GiB / 30.65 GiB (64%)` | 差 0.01 GiB，**算法口径不同**，要查（`MemTotal - MemAvailable` vs 它那套） |
+
+**比对时的测量假象**（踩过）：用 `timeout 25 fastfetch` 跑它，它会把 `Shell` 认成
+`timeout`、`Terminal` 认成 `node-MainThread`——那是它顺着父进程链看到了我们这边的进程，
+不是真差异。比对要直接跑 `fastfetch`，别套 `timeout`。
+
 ---
 
 ## 六、渲染设计

@@ -71,7 +71,9 @@ mod tests {
 
         // 本机有两块键盘（AT 键盘 + 无线接收器），电源键不该混进来。
         assert!(
-            !entries.iter().any(|info| info.value.contains("Power Button")),
+            !entries
+                .iter()
+                .any(|info| info.value.contains("Power Button")),
             "电源键不是键盘：{entries:?}"
         );
     }

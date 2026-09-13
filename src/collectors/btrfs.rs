@@ -12,7 +12,7 @@
 //! 两个容易搞错的地方：
 //!
 //! 1. **「已用」要用 `disk_used` 之和，不是 `bytes_used` 之和**。后者是文件系统内部的逻辑
-//!    计数，和 `df` 看到的口径不是一回事（本机两者差 2.7 GiB，因为压缩与元数据记账）。
+//!    计数，和 `df` 看到的口径不是一回事（本机两者差 2.70 GiB，因为压缩与元数据记账）。
 //!    fastfetch 用的也是 `disk_used`。
 //! 2. **「已分配」不等于「已用」**：btrfs 按块（chunk）预留空间，预留了未必用掉。两个百分比
 //!    各有意义，所以都要报。本机：已用 6%、已分配 12%。
@@ -79,7 +79,7 @@ fn describe_key(filesystem: &Filesystem) -> String {
     }
 }
 
-/// 值：`52.4 GiB / 920.9 GiB (6%, 12% allocated)`。
+/// 值：`52.40 GiB / 920.90 GiB (6%, 12% allocated)`。
 fn describe_value(filesystem: &Filesystem) -> String {
     format!(
         "{} / {} ({}%, {}% allocated)",
@@ -195,11 +195,14 @@ mod tests {
     #[test]
     fn renders_used_total_and_both_percentages() {
         // 本机的真实形状（已用 6%、已分配 12%）。
+        // 数值按 1024 进制算过：56_236_548_608 / 1024³ = 52.3745 → `52.37`，
+        // 988_860_000_000 / 1024³ = 920.9525 → `920.95`。一位小数时代这里是
+        // `52.4 / 920.9`，所以别照抄旧期望值加个 0——要按真实商重算。
         let filesystem = filesystem("myArch", 988_860_000_000, 117_060_000_000, 56_236_548_608);
 
         assert_eq!(
             describe_value(&filesystem),
-            "52.4 GiB / 920.9 GiB (6%, 12% allocated)"
+            "52.37 GiB / 920.95 GiB (6%, 12% allocated)"
         );
     }
 
