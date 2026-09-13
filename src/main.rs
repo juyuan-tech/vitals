@@ -8,14 +8,15 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use anstream::{AutoStream, ColorChoice};
-use clap::Parser;
+use clap::FromArgMatches;
 
-use vitals_rs::cli::{Cli, LogoChoice, Settings};
+use vitals_rs::cli::{self, Cli, LogoChoice, Settings};
 use vitals_rs::collectors::os_release;
 use vitals_rs::conditions;
 use vitals_rs::config::{self, ModuleEntry, ModuleType};
 use vitals_rs::core::dispatch::{Failure, RunOutcome};
 use vitals_rs::core::render::{RenderError, Renderer, Report};
+use vitals_rs::lang::Lang;
 use vitals_rs::render::json::JsonRenderer;
 use vitals_rs::render::logo;
 use vitals_rs::render::text::TextRenderer;
@@ -29,7 +30,12 @@ use vitals_rs::{COLLECTORS, Context, Dispatcher, PROGRAM, Platform};
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    // 语言要在解析之前定下来：它决定帮助文本用哪一套。
+    let matches = cli::command(Lang::resolve()).get_matches();
+    let cli = match Cli::from_arg_matches(&matches) {
+        Ok(cli) => cli,
+        Err(error) => error.exit(),
+    };
 
     // 这两个是「问完就走」的参数：不读配置文件、不采集。
     if cli.gen_config {

@@ -126,6 +126,8 @@ fn the_module_reference_documents_every_module() {
 fn flags_in_help() -> Vec<String> {
     let out = Command::new(env!("CARGO_BIN_EXE_vitals"))
         .arg("--help")
+        // 中英两份帮助列的是同一批选项，取哪份都一样；但测试不该随外面的 locale 变脸。
+        .env("VITALS_LANG", "zh")
         .output()
         .expect("该能跑 --help");
     let text = String::from_utf8_lossy(&out.stdout).to_string();
@@ -181,5 +183,20 @@ fn the_completions_know_every_option_and_logo() {
     for logo in logos {
         assert!(bash.contains(&logo), "bash 补全里缺 logo {logo}");
         assert!(zsh.contains(&logo), "zsh 补全里缺 logo {logo}");
+    }
+}
+
+#[test]
+fn the_version_in_the_cli_reference_is_current() {
+    // `docs/cli.md` 里印了 `vitals --version` 的真实输出，升版本时最容易忘了改它。
+    let expected = format!("vitals {}", env!("CARGO_PKG_VERSION"));
+
+    for name in ["docs/cli.md", "docs/configuration.md"] {
+        let text = std::fs::read_to_string(root().join(name))
+            .unwrap_or_else(|error| panic!("读不了 {name}：{error}"));
+        assert!(
+            text.contains(&expected),
+            "{name} 里该有 `{expected}`（改了版本号就更新这几处）"
+        );
     }
 }

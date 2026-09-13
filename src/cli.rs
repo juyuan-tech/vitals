@@ -12,9 +12,10 @@
 
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
 
 use crate::config::{Config, ModuleEntry, ModuleType};
+use crate::lang::Lang;
 
 // 注意：下面这个文档注释会被 clap 当成 `--help` 的详细说明，所以只写给用户看的话。
 // 维护者提醒：`name = "vitals"` 不能省——clap 默认取包名，也就是 `vitals-rs`，
@@ -116,6 +117,11 @@ fn parse_logo(value: &str) -> Result<LogoChoice, String> {
 /// 前者把校验留在 CLI 边界，错误信息能自己写；后者会让配置模块反过来依赖 clap。
 /// 合法取值从 [`ModuleType::ALL`] 现取，不另抄一份名单，避免漂移。
 fn parse_module(name: &str) -> Result<ModuleType, String> {
+    parse_module_with(name, Lang::Zh)
+}
+
+/// [`parse_module`] 的实现：错误信息按语言给。
+fn parse_module_with(name: &str, lang: Lang) -> Result<ModuleType, String> {
     // 比较时忽略大小写与 `-`/`_`：`LocalIp`、`localip`、`local-ip` 都能用
     // （fastfetch 的长名与我们自己的名字各占一半江山，见 `ModuleType::from_name`）。
     if let Some(module) = ModuleType::from_name(name) {
@@ -123,7 +129,11 @@ fn parse_module(name: &str) -> Result<ModuleType, String> {
     }
 
     let valid: Vec<&str> = ModuleType::ALL.iter().map(|module| module.name()).collect();
-    Err(format!("未知模块 `{name}`；可用：{}", valid.join(", ")))
+    let list = valid.join(", ");
+    Err(match lang {
+        Lang::Zh => format!("未知模块 `{name}`；可用：{list}"),
+        Lang::En => format!("unknown module `{name}`; available: {list}"),
+    })
 }
 
 /// 叠完优先级之后的最终设置。
@@ -219,4 +229,125 @@ impl Settings {
 /// `true` / `false` → `开` / `关`。
 fn on_off(value: bool) -> &'static str {
     if value { "开" } else { "关" }
+}
+
+/// 按语言生成 clap 的命令定义。
+///
+/// 选项**结构**只有派生那一份（名字、取值、解析器都在上面），这里只换帮助文本：
+/// 中文就是那些文档注释本身，英文在这里覆盖。新增选项记得两边都写——
+/// `tests/binary.rs` 会检查中英帮助列出的是同一批选项。
+#[must_use]
+pub fn command(lang: Lang) -> Command {
+    let command = Cli::command();
+
+    match lang {
+        Lang::Zh => command
+            // clap 自动加的 `-h/--help`、`-V/--version` 要到 build 阶段才生成，
+            // 用 `mut_arg` 会当场 panic（`Argument 'help' is undefined`）。
+            // 所以这里先把自动的那两个关掉，自己补上形状相同的一对，
+            // 只把帮助文本换成中文。
+            .disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                Arg::new("help")
+                    .short('h')
+                    .long("help")
+                    .action(ArgAction::Help)
+                    .help("打印帮助"),
+            )
+            .arg(
+                Arg::new("version")
+                    .short('V')
+                    .long("version")
+                    .action(ArgAction::Version)
+                    .help("打印版本"),
+            )
+            .after_help(HELP_FOOTER_ZH),
+        Lang::En => english(command),
+    }
+}
+
+/// 英文帮助：逐个换掉帮助文本，结构与解析器一概不动。
+fn english(command: Command) -> Command {
+    command
+        .about(crate::TAGLINE_EN)
+        .long_about(EN_LONG_ABOUT)
+        .after_help(HELP_FOOTER_EN)
+        .mut_arg("config", |arg| {
+            arg.value_name("FILE")
+                .help("Config file to use (default: $XDG_CONFIG_HOME/vitals/config.toml)")
+        })
+        .mut_arg("json", |arg| {
+            arg.help("Output JSON (turns off colors and the logo)")
+        })
+        .mut_arg("logo", |arg| {
+            arg.value_name("auto|none|NAME")
+                .help("Logo: auto picks one by distribution, none hides it, or name it directly")
+        })
+        .mut_arg("module", |arg| {
+            arg.value_name("LIST")
+                .help(
+                    "Show only these modules, comma-separated. Order is yours, \
+                     and modules the config does not list work too",
+                )
+                .value_parser(parse_module_en)
+        })
+        .mut_arg("no_color", |arg| {
+            arg.help("Turn colors off (same as setting NO_COLOR)")
+        })
+        .mut_arg("list_modules", |arg| {
+            arg.help("List every available module")
+        })
+        .mut_arg("gen_config", |arg| {
+            arg.help("Print the built-in default config to stdout")
+        })
+        .mut_arg("verbose", |arg| {
+            arg.help("Write diagnostics (including the effective settings) to stderr")
+        })
+        .mut_arg("explain", |arg| {
+            arg.help("Explain, module by module, why each one appeared or did not")
+                .long_help(EN_EXPLAIN_LONG)
+        })
+        .mut_arg("sources", |arg| {
+            arg.help("The files each module actually read (recorded at runtime)")
+                .long_help(EN_SOURCES_LONG)
+        })
+}
+
+/// 中文帮助的页脚：说清帮助语言怎么选，以及哪些文本还不是双语。
+const HELP_FOOTER_ZH: &str = "\
+帮助语言：VITALS_LANG=zh|en（不设时看 LC_ALL / LC_MESSAGES / LANG，拿不准用中文）
+运行期文本（--explain、--sources、错误信息）目前只有中文。";
+
+/// 英文帮助的页脚。
+const HELP_FOOTER_EN: &str = "\
+Help language: VITALS_LANG=zh|en (otherwise LC_ALL / LC_MESSAGES / LANG; when unsure, Chinese)
+Runtime messages (--explain, --sources, errors) are still Chinese only.";
+
+/// 英文的详细说明，对应 `Cli` 上的文档注释。
+const EN_LONG_ABOUT: &str = "\
+Your system's vitals, all at a glance.
+
+With no arguments it renders whatever the config says; `--module` keeps just a few.";
+
+/// 英文的 `--explain` 详细说明。
+const EN_EXPLAIN_LONG: &str = "\
+Explain, module by module, why each one appeared or did not.
+
+How it differs from `--verbose`: `--verbose` only reports which modules a condition
+blocked, and writes to stderr; `--explain` speaks about the *result* — shown, empty,
+skipped, failed — each with its own reason. Telling \"empty\" apart from \"shown\"
+means it really has to collect, so it costs one collection.";
+
+/// 英文的 `--sources` 详细说明。
+const EN_SOURCES_LONG: &str = "\
+The files each module actually read (recorded at runtime, not a hand-written list).
+
+How it differs from `--explain`: `--explain` reports state (shown, empty, skipped,
+failed); `--sources` reports evidence (which file was read). Given both, it prints
+state first, then evidence.";
+
+/// clap 的取值解析器：`--module` 的一项 → [`ModuleType`]（英文报错）。
+fn parse_module_en(name: &str) -> Result<ModuleType, String> {
+    parse_module_with(name, Lang::En)
 }

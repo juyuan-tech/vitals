@@ -18,6 +18,7 @@ pub mod collectors;
 pub mod conditions;
 pub mod config;
 pub mod core;
+pub mod lang;
 pub mod render;
 
 pub use crate::collectors::COLLECTORS;
@@ -36,3 +37,6 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 一句话标语。
 pub const TAGLINE: &str = "你的系统生命体征，一眼看全。";
+
+/// 一句话标语的英文版，只用在英文帮助里。
+pub const TAGLINE_EN: &str = "Your system's vitals, all at a glance.";

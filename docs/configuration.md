@@ -4,7 +4,7 @@
 
 文中所有结论都来自三个地方：仓库源码（仓库根）、内置默认配置
 `src/config/default.toml`、以及对 `target/release/vitals` 的真实运行。每个键都给出
-`文件:行号`；每个行为后面都注明验证方式。版本：`vitals 0.1.0`（`vitals --version`）。
+`文件:行号`；每个行为后面都注明验证方式。版本：`vitals 0.1.1`（`vitals --version`）。
 
 配置文件的解析只有一条路径：`src/config.rs` 的 `load`，最终反序列化成
 `src/config/schema.rs` 里的 `ConfigFile`。除此以外没有别的配置来源。

@@ -2,6 +2,10 @@
 
 ## 未发布
 
+- 帮助双语：`VITALS_LANG=zh|en`，不设时按 `LC_ALL` / `LC_MESSAGES` / `LANG` 判断，
+  **拿不准一律中文**（所以「什么都不设」的行为和以前完全一样）。英文还有 `--module`
+  写错时的英文报错与英文取值名。选项结构仍然只有派生那一份，只有帮助文本按语言覆盖；
+  运行期文本（`--explain`、`--sources`、错误信息）仍只有中文，README 与 `docs/cli.md` 里写明。
 - 新增 `completions/`：bash 与 zsh 补全。两份都真跑过（bash 直接调补全函数、zsh 用 fpath + compinit 装载）；模块名现问 `--list-modules`，选项名与 Logo 名由 `tests/docs.rs` 双向盯着。fish 未提供——本机没有 fish，没验证过的不交付。
 - 修掉 `disk_io` 里两个依赖宿主机型的测试（断言了本机 NVMe 的型号、赌虚拟盘叫 zram0），CI 上红过一次（那台机器报 `MSFT NVMe Accelerator v1.0`），上一轮只是碰巧通过。现在自己搭 `/sys/block/<dev>/device/` 的输入，四种情况都钉住。
 

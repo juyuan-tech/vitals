@@ -14,6 +14,9 @@ fn vitals(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_vitals"))
         .args(args)
         .env("XDG_CONFIG_HOME", "/nonexistent/vitals-for-tests")
+        // 这里的断言写的都是中文输出：把帮助语言钉死，测试不该随外面的 locale 变脸。
+        // 语言本身的行为由 `tests/lang.rs` 专门测。
+        .env("VITALS_LANG", "zh")
         .env_remove("COLUMNS")
         .output()
         .expect("跑不动自己的二进制")

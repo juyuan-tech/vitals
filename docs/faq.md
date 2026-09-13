@@ -110,6 +110,20 @@ os       显示  1 项
 gamepad  空  这台机器上没有可显示的数据
 ```
 
+## 帮助能换成英文吗？
+
+能，中英两套帮助都在二进制里，不需要语言包：
+
+```
+$ VITALS_LANG=en vitals -h      # 就这一条命令要英文
+$ export VITALS_LANG=en         # 或者一直用英文
+```
+
+不设 `VITALS_LANG` 时看 `LC_ALL` / `LC_MESSAGES` / `LANG`；**拿不准就用中文**，
+所以「什么都不设」还是原来的行为。优先级表和判定细则见 [`cli.md`](cli.md#语言)。
+
+只换帮助：`--explain`、`--sources` 和错误信息目前仍是中文。
+
 ## 怎么加一个模块？
 
 见 [`../CONTRIBUTING.md`](../CONTRIBUTING.md)。采集器契约只有两个方法

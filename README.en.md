@@ -234,8 +234,11 @@ friends — most need a linked system library (at odds with "no `unsafe`, no ext
 a network request, or an external command. `Custom` is not implemented either: it would place
 arbitrary command output into the layout, which collides with the no-subprocess stance.
 
-Other known gaps: the built-in help text is Chinese only, and there are no shell completions
-(generating them would pull in `clap_complete`).
+Other known gaps: runtime messages (`--explain`, `--sources`, errors) are Chinese only —
+the help itself is bilingual (`VITALS_LANG=zh|en`, otherwise decided by the locale, and
+when that is unclear it stays Chinese). Shell completions cover bash and zsh only; there
+is no fish one, because there was no fish here to verify it on, and untested things are
+not shipped.
 
 ## Development
 
