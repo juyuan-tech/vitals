@@ -666,6 +666,29 @@ Codec (Decoder): MJPEG, H.264, HEVC / H.265, VP9, AV1
 - 不在「判断命令是否存在」时真的执行命令
 - 不用 `mod.rs`（一律自名文件 + 同名目录，由 `clippy::mod_module_files` 在 CI 里强制）
 
+### 5.9 用户并排对比后剩下的差异（16:29 那一版）
+
+分隔线宽度、键对齐、默认视图长度这三条已经修掉（记在 §5.8）。剩下这些，按「值不值得动手」排。
+
+**便宜（值都是现成的）**
+
+| 项 | 我们 | fastfetch | 做法 |
+|---|---|---|---|
+| Shell 版本 | `zsh` | `zsh 5.9.2` | `pkgdb::version_of("zsh")`——已经有了，零子进程 |
+| Terminal 版本 | `kitty` | `kitty 0.48.2` | 同上（包数据库里有） |
+| OS 架构 | `Arch Linux` | `Arch Linux x86_64` | `uname` 的 machine；`std::env::consts::ARCH` 是**编译时**的，不能拿它当机器架构 |
+| Kernel 前缀 | `7.2.4-arch1-2` | `Linux 7.2.4-arch1-2` | 加前缀——先前当成「刻意偏差」，并排看过之后没道理不跟它一样 |
+| 运行时长格式 | `1d 5h` | `1 day, 5 hours, 41 mins` | 改成人类写法（单复数要处理：`1 day` 不是 `1 days`） |
+| WM 键名与大小写 | `WM: Niri 26.04 (wayland)` | `Window Manager: niri 26.04 (Wayland)` | 键改成 `Window Manager`；值里 `(wayland)` → `(Wayland)` |
+
+**中等（要多读一点东西）**
+
+- **`Disk` 只列了 `/`**：它把外接盘也各列一行（`Disk (/run/media/gxyarch/Kingston): 10.37 GiB / 57.66 GiB (18%) - exfat [External]`）。做法是遍历 `/proc/self/mountinfo`，滤掉伪文件系统，每个真实挂载点一行。挂载点是键，文件系统类型与 `[External]` 是值的一部分。
+- **`Display` 的键与值**：它用 EDID 里的型号（`SDC4197`）当键，不是连接器名（`eDP-1`）；值里带缩放倍率与物理尺寸（`2880x1800 @ 1.74x in 14", 120 Hz`）与 `[Built-in]`。
+- **`Colors`**：它在末尾印 16 个色块（8 列 × 2 行）。这是**渲染器**的事：模块本身不发数据，按 §6.1 的规矩由渲染器就地画。
+- **`Cursor` 的值是错的**：它 `breeze (30px)`，我们 `Adwaita (Xcursor)`——我们读的是 `/usr/share/icons/default/index.theme` 里那个「默认」，不是用户实际在用的光标主题，也少了尺寸。它从哪读的还没查清（可能走 X 的设置，也可能读用户的配置文件）；**没查清之前不改**，免得把错的换成另一个错的。
+- **`CPU` / `GPU` 的值形状**：它 `(16) @ 5.10 GHz` 与 `AMD HawkPoint1 [Integrated]`，我们 `(8C/16T)` 与 `AMD Radeon 780M [HawkPoint1] (amdgpu)`。两边携带的信息不同（它给了频率与「是不是核显」，我们给了线程数与驱动），逐条裁定。
+
 ---
 
 ## 附：已经拍板的争议点

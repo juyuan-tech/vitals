@@ -9,7 +9,7 @@
 //!
 //! 全程不 fork。
 
-use crate::collectors::{env, proc_chain};
+use crate::collectors::{env, pkgdb, proc_chain};
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
 
@@ -62,8 +62,19 @@ impl Collector for Terminal {
         };
 
         Ok(vec![
-            Info::new(self.name(), "Terminal", terminal.clone()).with_variable("name", terminal),
+            Info::new(self.name(), "Terminal", display(&terminal)).with_variable("name", terminal),
         ])
+    }
+}
+
+/// 显示值：名字后面跟上版本（`kitty 0.48.2`），版本从包数据库读，零子进程。
+///
+/// 与 shell 一样，版本是附加信息：查不到（`$TERM` 兜底出来的 `xterm-256color`
+/// 就不是包名）就只印名字，不因为查不到而少一行。
+fn display(terminal: &str) -> String {
+    match pkgdb::version_of(terminal) {
+        Ok(Some(version)) => format!("{terminal} {version}"),
+        _ => terminal.to_owned(),
     }
 }
 

@@ -42,20 +42,31 @@ fn render(bytes: u64, digits: usize) -> String {
 /// 最多给两级单位：给三级让人去数零，给一级又太粗。
 #[must_use]
 pub fn duration(seconds: u64) -> String {
-    let days = seconds / 86_400;
-    let hours = seconds % 86_400 / 3_600;
-    let minutes = seconds % 3_600 / 60;
-    let secs = seconds % 60;
+    let units = [
+        (seconds / 86_400, ["day", "days"]),
+        (seconds % 86_400 / 3_600, ["hour", "hours"]),
+        (seconds % 3_600 / 60, ["min", "mins"]),
+        (seconds % 60, ["sec", "secs"]),
+    ];
 
-    if days > 0 {
-        format!("{days}d {hours}h")
-    } else if hours > 0 {
-        format!("{hours}h {minutes}m")
-    } else if minutes > 0 {
-        format!("{minutes}m {secs}s")
-    } else {
-        format!("{secs}s")
+    // fastfetch 的写法：`1 day, 5 hours, 41 mins`——非零的单位依次列出，最多三个
+    // （四个都非零时丢掉秒），一个都没有就说 `0 secs`。天与小时写全，分秒用缩写，
+    // 单复数跟着数值走。先前是 `1d 5h` 这种紧凑写法，与它对不上。
+    let parts: Vec<String> = units
+        .iter()
+        .filter(|(value, _)| *value > 0)
+        .take(3)
+        .map(|(value, names)| {
+            let name = if *value == 1 { names[0] } else { names[1] };
+            format!("{value} {name}")
+        })
+        .collect();
+
+    if parts.is_empty() {
+        return "0 secs".to_owned();
     }
+
+    parts.join(", ")
 }
 
 /// `used / total` 的整数百分比，四舍五入。
@@ -105,14 +116,18 @@ mod tests {
     }
 
     #[test]
-    fn durations_use_at_most_two_units() {
-        assert_eq!(duration(0), "0s");
-        assert_eq!(duration(59), "59s");
-        assert_eq!(duration(60), "1m 0s");
-        assert_eq!(duration(3_661), "1h 1m");
-        assert_eq!(duration(86_400), "1d 0h");
-        // 实测这台机器的 /proc/uptime 第一列：101546 秒
-        assert_eq!(duration(101_546), "1d 4h");
+    fn durations_read_like_fastfetch() {
+        assert_eq!(duration(0), "0 secs");
+        assert_eq!(duration(59), "59 secs");
+        assert_eq!(duration(60), "1 min", "零的单位不列");
+        assert_eq!(duration(3_661), "1 hour, 1 min, 1 sec");
+        assert_eq!(duration(86_400), "1 day");
+        // 实测这台机器的 /proc/uptime 第一列：101546 秒 = 1 天 4 小时 12 分 26 秒
+        assert_eq!(
+            duration(101_546),
+            "1 day, 4 hours, 12 mins",
+            "最多三个单位，秒被丢掉"
+        );
     }
 
     #[test]

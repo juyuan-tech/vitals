@@ -1,5 +1,7 @@
 //! OS：发行版名称。数据来自 `/etc/os-release`。
 
+use rustix::system::uname;
+
 use crate::collectors::os_release;
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
@@ -22,7 +24,11 @@ impl Collector for Os {
         };
 
         // 变量表放原始字段，给将来的模板用——显示值只是它的一个视图。
-        let mut info = Info::new(self.name(), "OS", name);
+        // 值带上机器架构（`Arch Linux x86_64`）。用 `std::env::consts::ARCH` 会把
+        // **编译时**的架构当成机器的，那是两回事：交叉编译出来的二进制会撒谎。
+        let machine = uname().machine().to_string_lossy().into_owned();
+        let mut info = Info::new(self.name(), "OS", format!("{name} {machine}"))
+            .with_variable("machine", machine);
         for (key, value) in [
             ("id", &release.id),
             ("id_like", &release.id_like),

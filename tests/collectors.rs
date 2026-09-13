@@ -134,7 +134,19 @@ fn the_os_module_agrees_with_the_platform_context() {
         let outcome = Dispatcher::new(COLLECTORS).run(&["os"], &context());
         let info = &outcome.entries[0];
 
-        assert_eq!(info.value, release.display_name().unwrap());
+        // 值 = 发行版名 + 机器架构（`Arch Linux x86_64`），所以比 display_name 多一段。
+        let name = release.display_name().unwrap();
+        assert!(
+            info.value.starts_with(name),
+            "{} 该以 {name} 开头",
+            info.value
+        );
+        let machine = info
+            .value
+            .strip_prefix(&format!("{name} "))
+            .expect("架构该跟在名字后面");
+        assert!(!machine.is_empty(), "架构不该是空的");
+        assert_eq!(info.variable("machine"), Some(machine));
         assert_eq!(info.variable("id"), release.id.as_deref());
     }
 }

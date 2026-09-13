@@ -3,7 +3,7 @@
 //! 只报名字，不报版本——拿版本得把 shell 本身跑起来（`zsh --version`），
 //! 而 `PLAN.md` 定的是 v0.1 不开任何子进程。
 
-use crate::collectors::{accounts, env};
+use crate::collectors::{accounts, env, pkgdb};
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
 
@@ -21,9 +21,20 @@ fn basename(path: &str) -> &str {
 /// 组装一条 shell 信息。
 fn entry(path: &str) -> Info {
     let name = basename(path).to_owned();
-    Info::new("shell", "Shell", name.clone())
+
+    // 值带上版本（`zsh 5.9.2`）：版本从包数据库读，仍然是零子进程。
+    // 版本只是**附加**信息，查不到不影响这一行的核心（名字），所以这里不把
+    // 它的失败当失败——整行因为查版本失败而不显示，比不显示版本糟得多。
+    let mut info = Info::new("shell", "Shell", name.clone())
         .with_variable("path", path.to_owned())
-        .with_variable("name", name)
+        .with_variable("name", name.clone());
+
+    if let Ok(Some(version)) = pkgdb::version_of(&name) {
+        info.value = format!("{name} {version}");
+        info = info.with_variable("version", version);
+    }
+
+    info
 }
 
 impl Collector for Shell {
@@ -66,7 +77,7 @@ mod tests {
         let info = entry("/usr/bin/zsh");
 
         assert_eq!(info.key, "Shell");
-        assert_eq!(info.value, "zsh");
+        assert!(info.value.starts_with("zsh"), "实际：{}", info.value);
         assert_eq!(info.variable("name"), Some("zsh"));
         assert_eq!(info.variable("path"), Some("/usr/bin/zsh"));
     }

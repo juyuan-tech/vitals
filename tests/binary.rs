@@ -224,7 +224,10 @@ fn the_title_has_no_key_and_the_rule_matches_the_title() {
     // 横线的长度 = **标题**的宽度（fastfetch 的口径），不是信息列里最宽的那行。
     let title_width = lines[0].chars().count();
     assert_eq!(lines[1], "─".repeat(title_width), "横线该跟着标题");
-    assert_eq!(lines[2], "OS: Arch Linux");
+    assert!(
+        lines[2].starts_with("OS: Arch Linux"),
+        "OS 值后面还跟着机器架构：{text}"
+    );
 }
 
 #[test]

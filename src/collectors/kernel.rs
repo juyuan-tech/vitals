@@ -21,7 +21,9 @@ impl Collector for Kernel {
         let uts = uname();
 
         let release = uts.release().to_string_lossy().into_owned();
-        let info = Info::new(self.name(), "Kernel", release.clone())
+        // 值带上 sysname（`Linux 7.2.4-arch1-2`）：fastfetch 印的是完整的 uname。
+        // 裸版本号仍然放在 `release` 变量里，脚本要它时不用去切字符串。
+        let info = Info::new(self.name(), "Kernel", format!("Linux {release}"))
             .with_variable("release", release)
             .with_variable("sysname", uts.sysname().to_string_lossy().into_owned())
             .with_variable("machine", uts.machine().to_string_lossy().into_owned());
@@ -48,7 +50,8 @@ mod tests {
             "不该是这个样子：{}",
             entries[0].value
         );
-        assert_eq!(entries[0].value, entries[0].variable("release").unwrap());
+        let release = entries[0].variable("release").unwrap();
+        assert_eq!(entries[0].value, format!("Linux {release}"));
     }
 
     #[test]
