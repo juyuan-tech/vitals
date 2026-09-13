@@ -24,6 +24,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use crate::collectors::read;
+use crate::collectors::routing;
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
 
@@ -57,9 +58,7 @@ impl Collector for LocalIp {
             // 路由表读不到（非 Linux、容器里没挂 /proc）就只报地址，
             // 不写网卡名也不写前缀——少两个信息，总比编一个好。
             let route = read::text(ROUTE4)?;
-            let default_route = route.as_deref().and_then(default_route);
-
-            let interface = default_route.as_ref().map(|route| route.interface.clone());
+            let interface = route.as_deref().and_then(routing::default_route_interface);
             let prefix = route
                 .as_deref()
                 .zip(interface.as_deref())
@@ -155,43 +154,6 @@ fn probe(bind: &str, target: &str) -> Result<Option<IpAddr>, CollectError> {
         Ok(local) if !local.ip().is_unspecified() => Ok(Some(local.ip())),
         _ => Ok(None),
     }
-}
-
-/// 一条默认路由。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Route {
-    /// 出口网卡名。
-    interface: String,
-}
-
-/// 从 `/proc/net/route` 里找默认路由的出口网卡。
-///
-/// 文件是空白分隔的固定列，第一行是表头：
-/// `Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT`。
-/// 默认路由的判据两条缺一不可：
-///
-/// - `Destination` 是 `00000000`（0.0.0.0，「所有目的地」）；
-/// - `Flags` 含 `0002`（RTF_GATEWAY）。只写 `0001`（RTF_UP）的是链路路由，
-///   本机的 `docker0` 那行就是，它不是默认路由。
-///
-/// **不用这一行的 `Mask` 算前缀长度**：默认路由的掩码就是 `00000000`，
-/// 拿它当 CIDR 会印出 `/0`——错得离谱。前缀长度另找连接路由，见 [`connected_prefix`]。
-fn default_route(text: &str) -> Option<Route> {
-    text.lines().skip(1).find_map(|line| {
-        let mut fields = line.split_whitespace();
-        let interface = fields.next()?;
-        let destination = fields.next()?;
-        let _gateway = fields.next()?;
-        let flags = u32::from_str_radix(fields.next()?, 16).ok()?;
-
-        if destination != "00000000" || flags & 0x0002 == 0 {
-            return None;
-        }
-
-        Some(Route {
-            interface: interface.to_owned(),
-        })
-    })
 }
 
 /// 求「地址所在网段」的前缀长度：同一张网卡上掩码最长的那条路由。
@@ -308,7 +270,10 @@ fn valid_mac(text: &str) -> Option<&str> {
 mod tests {
     use super::*;
 
-    /// 本机 `/proc/net/route` 的原文（制表符照抄，表头也留着——解析要跳过它）。
+    /// 本机 `/proc/net/route` 的原文（制表符照抄）。
+    ///
+    /// 「哪张网卡是默认出口」的解析已经搬到 `routing.rs`（两边共用一份），这里只用它
+    /// 来验 `connected_prefix`——前缀长度来自连接路由那行，不是默认路由那行。
     const ROUTE_TEXT: &str = "\
 Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n\
 enp5s0f4u1u3c2\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n\
@@ -320,27 +285,6 @@ enp5s0f4u1u3c2\t0001A8C0\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n";
 fe8000000000000080c08afffef2388d 05 40 20 80  docker0\n\
 24088221772a15d016683a55e3462b7a 02 40 00 00 enp5s0f4u1u3c2\n\
 00000000000000000000000000000001 01 80 10 80       lo\n";
-
-    #[test]
-    fn finds_the_default_route_by_destination_and_gateway_flag() {
-        let route = default_route(ROUTE_TEXT).expect("第二行是默认路由");
-
-        assert_eq!(route.interface, "enp5s0f4u1u3c2");
-    }
-
-    #[test]
-    fn a_link_route_is_not_a_default_route() {
-        // `docker0` 那行 Destination 是 000011AC（172.17.0.0），不是默认路由；
-        // 就算它写着 00000000，Flags 里没有 0002 也一样不算。
-        let link_only = "\
-Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n\
-eth0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0\n";
-        assert_eq!(default_route(link_only), None);
-
-        // 表头都没有、整张表是空的，也是无数据。
-        assert_eq!(default_route(""), None);
-        assert_eq!(default_route("Iface\tDestination\n"), None);
-    }
 
     #[test]
     fn the_default_line_mask_is_not_the_prefix_length() {

@@ -73,6 +73,7 @@ pub mod power_supply;
 pub mod proc_chain;
 pub mod processes;
 pub mod read;
+pub mod routing;
 pub mod rust;
 pub mod separator;
 pub mod session;

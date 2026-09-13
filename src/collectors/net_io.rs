@@ -43,12 +43,13 @@
 //! ## 与 upstream 的结构差异
 //!
 //! 默认路由的查找在 upstream 里是共用的 `common/netif`，而这里的
-//! [`default_route_interface`] 与 `local_ip.rs` 里那段是**两份**。
+//! 默认出口网卡的解析在 [`crate::collectors::routing`]：`local-ip` 要用同一份判断，
+//! 两边各写一份、改一处忘一处，迟早会对不上。
 //! 抽公共件时这两处是第一候选；本次不动 `local_ip.rs`。
 
 use std::time::{Duration, Instant};
 
-use crate::collectors::{read, units};
+use crate::collectors::{read, routing, units};
 use crate::core::collector::{CollectError, Collector, Context};
 use crate::core::info::Info;
 
@@ -73,7 +74,7 @@ impl Collector for NetIo {
             // 连路由表都没有（内核没开 IPv4 路由），无数据。
             return Ok(Vec::new());
         };
-        let Some(interface) = default_route_interface(&route) else {
+        let Some(interface) = routing::default_route_interface(&route) else {
             // 没有默认路由 = 没有要报的网卡。
             return Ok(Vec::new());
         };
@@ -148,28 +149,6 @@ fn sys_net(interface: &str, leaf: &str) -> String {
 /// （本机 `lo` 的 operstate 就是 `unknown`）。
 fn is_usable(operstate: &str) -> bool {
     operstate.starts_with('u')
-}
-
-/// 从 `/proc/net/route` 里挑出默认路由那张网卡的**名字**。
-///
-/// 判据两条，都要满足：
-///
-/// - `Destination` 是 `00000000`（默认路由）
-/// - `Flags` 含 `0x0002`（`RTF_UP`）
-///
-/// 本机原文里 `docker0` 那行 `Destination` 是 `000011AC`（172.17.0.0），
-/// 而 `Flags` 只有 `0001`——两条都不满足，所以它不会当选。
-fn default_route_interface(text: &str) -> Option<String> {
-    text.lines().skip(1).find_map(|line| {
-        let mut fields = line.split_whitespace();
-        let interface = fields.next()?;
-        let destination = fields.next()?;
-        let _gateway = fields.next()?;
-        let flags = fields.next()?;
-
-        let up = (u32::from_str_radix(flags, 16).ok()? & 0x0002) != 0;
-        (destination == "00000000" && up).then(|| interface.to_owned())
-    })
 }
 
 /// 一张网卡的累计收发字节数。
@@ -267,33 +246,6 @@ mod tests {
     use super::*;
 
     /// 本机 `/proc/net/route` 的原文（制表符照抄，表头也留着）。
-    const ROUTE_TEXT: &str = "\
-Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n\
-enp5s0f4u1u3c2\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n\
-docker0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n\
-enp5s0f4u1u3c2\t0001A8C0\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n";
-
-    #[test]
-    fn finds_the_default_route_interface() {
-        assert_eq!(
-            default_route_interface(ROUTE_TEXT).as_deref(),
-            Some("enp5s0f4u1u3c2")
-        );
-    }
-
-    #[test]
-    fn a_link_route_is_not_a_default_route() {
-        // docker0 那行 Destination 是 000011AC，不是默认路由。
-        // 就算写着 00000000，Flags 里没有 0002 也一样不算（下面这张表）。
-        let link_only = "\
-Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n\
-eth0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0\n";
-        assert_eq!(default_route_interface(link_only), None);
-
-        // 表头都没有、整张表是空的，也是无数据。
-        assert_eq!(default_route_interface(""), None);
-    }
-
     #[test]
     fn the_operstate_rule_keeps_up_and_unknown() {
         // 本机 `/sys/class/net/*/operstate` 的原文：dae0/docker0/enp5s0f4u1u3c2/
