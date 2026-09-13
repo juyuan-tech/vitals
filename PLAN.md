@@ -766,3 +766,25 @@ Monitor (SDC4197): 2880x1800 px @ 120.001 Hz - 300x190 mm (13.98 inches, 242.93 
 
 > 注意：`display.rs` 的测试里已有 `edid_with(pixel_clock_10khz, width, height)` 这个合成
 > fixture helper（第 235 行附近），扩它比新造一个更省事，但要在注释里写明它是合成的。
+
+## §5.12 `Bluetooth` 定为**不做**（附真机查证）
+
+fastfetch 在本机印 `Bluetooth 1: G3 Mouse (71%)`。为了不做错，把本机能查的地方都查了：
+
+| 线索 | 结果 |
+|---|---|
+| `/sys/class/power_supply/*/capacity` | 只有 `BAT0`（机身电池，100%）——**没有 71% 那一块** |
+| `/sys/class/bluetooth/` | 只有 `hci0`（控制器），列不出设备 |
+| `/sys/bus/hid/devices/*/uevent` 里的 `BUS_BLUETOOTH` | **一个都没有**（那只 G3 Mouse 是 UHID/logger 设备，不是真的蓝牙 HID） |
+
+结论：那个 `(71%)` 与设备名只可能来自 **BlueZ 的 D-Bus 接口**（`org.bluez` 下 `Connected`
+的设备 + `Battery1`）——fastfetch 链接 libdbus 正是这么干的。
+
+本项目「零子进程 + 零新依赖 + 不用 unsafe」三条同时挡着这条路：自己实现 D-Bus 线协议不是
+一个系统信息 CLI 该干的事（而 `zbus`/`dbus` 这类 crate 又违反第 2 条）。
+
+所以 `Bluetooth`/`BluetoothRadio` 与 `OpenGL`/`Vulkan`/`OpenCL`/`Codec` 一样进**核心外**
+清单（§5.7）：不是没做，是**明确不做**，理由就是上面三行真机查证。
+
+> 这一条同时修正了 §5.7 早先那句「`Bluetooth` 只做连接状态与电量」——当时以为
+> `power_supply` 或 `/sys/class/bluetooth` 能给出这两样，真机一查，两处都给不出。
