@@ -43,7 +43,7 @@ impl Collector for Disk {
 
     fn collect(&self, _ctx: &Context) -> Result<Vec<Info>, CollectError> {
         let vfs = statvfs(MOUNT).map_err(|error| {
-            CollectError::caused_by(format!("读取 {MOUNT} 的文件系统信息失败"), error)
+            CollectError::caused_by(crate::i18n::now().mount_read_failed(MOUNT), error)
         })?;
 
         // f_frsize 是「计量块的基本单位」，POSIX 允许它是 0，那时退回 f_bsize。

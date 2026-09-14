@@ -50,11 +50,11 @@ impl SkipReason {
     pub fn describe(&self) -> String {
         match self {
             Self::Platform => match HostOs::current() {
-                Some(current) => format!("当前平台是 {}", current.name()),
-                None => "当前平台不在支持的名单里".to_owned(),
+                Some(current) => crate::i18n::now().platform_is(current.name()),
+                None => crate::i18n::now().platform_unsupported().to_owned(),
             },
-            Self::Command(command) => format!("命令 `{command}` 不在 PATH 里"),
-            Self::Path(path) => format!("路径 {} 不存在", path.display()),
+            Self::Command(command) => crate::i18n::now().command_missing(command),
+            Self::Path(path) => crate::i18n::now().path_missing(path.display()),
         }
     }
 }

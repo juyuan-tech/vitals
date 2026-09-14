@@ -2,7 +2,7 @@
 
 [English](cli.en.md) | **中文**
 
-本文描述 `vitals`（版本 0.1.1）的命令行行为。命令行只有选项，没有位置参数；多给一个位置参数会以退出码 2 结束。
+本文描述 `vitals`（版本 0.1.2）的命令行行为。命令行只有选项，没有位置参数；多给一个位置参数会以退出码 2 结束。
 
 文中每个命令都在本机真实执行过，输出片段为原样截取（过长处截断，未改写数值）。
 
@@ -10,7 +10,7 @@
 Usage: vitals [OPTIONS]
 ```
 
-`-h` 打印摘要（首行是英文标语 `Your system's vitals, all at a glance.`），`--help` 打印完整说明（首行是中文 `你的系统生命体征，一眼看全。`）。两者列出的选项集合相同。
+`-h` 打印摘要，`--help` 打印完整说明；两者首行是**同一条**标语（中文 `你的系统生命体征，一眼看全。`、英文 `Your system's vitals, all at a glance.`），和其余帮助文本一样跟下面的语言规则走。两者列出的选项集合相同。
 
 ## 选项一览
 
@@ -36,6 +36,7 @@ Usage: vitals [OPTIONS]
 指定配置文件。不写时按 `$XDG_CONFIG_HOME/vitals/config.toml` 查找。
 
 显式指定路径时，文件读不到是**错误**：写一行 `vitals: ...` 到 stderr，退出码 1，不渲染任何内容。
+文件也有 8 MiB 读取上限（与采集器同一个数）：指到 `/dev/zero` 这类文件时不会整份读进内存。
 
 ```
 $ vitals --config /tmp/vxdg/vitals/config.toml --logo none
@@ -211,7 +212,7 @@ $ vitals --list-modules --config /tmp/nope-vitals.toml >/dev/null ; echo $?
 
 ## `--gen-config`
 
-把内置默认配置打印到 stdout（2422 字节，以换行结束），不读配置文件、不采集；与其它选项同给也照常成功：
+把内置默认配置打印到 stdout（**按语言选模板**：中文 2422 字节、英文 2655 字节，都以换行结束），不读配置文件、不采集；与其它选项同给也照常成功：
 
 ```
 $ vitals --gen-config | head -6
@@ -322,15 +323,18 @@ wm  没有读文件  （数据来自环境变量或系统调用）
 
 ```
 $ vitals --version
-vitals 0.1.1
+vitals 0.1.2
 ```
 
 `-h` 是短帮助（每个选项一行）、`--help` 是长帮助（带多段说明），两种语言都保持这个区别。
 
 ## 语言
 
-帮助文本有中英两套，都随二进制发布，不需要语言包。字段名（`OS:`、`Memory:`）本来
-就是英文；运行期文本（`--explain`、`--sources`、错误信息）目前**只有中文**。
+帮助文本有中英两套，都随二进制发布，不需要语言包。字段名（`OS:`、`Memory:`）本来就是
+英文，两种语言下都一样；**运行期文案**同样两套——`--explain` 的四种状态、`--sources` 的
+「没有读文件」、`--verbose` 的设置行、错误信息，以及 `--gen-config` 打印的那份带注释模板
+（中文模板 `config/default.toml`、英文模板 `config/default.en.toml`，结构一致），都按下面
+这套规则选。
 
 选哪套按这个顺序，先命中先算：
 
@@ -376,7 +380,7 @@ $ vitals --module os --logo none >/dev/full ; echo $?
 vitals: 写入输出失败
 1
 
-$ vitals 2>/dev/null | head -1 >/dev/null ; echo $?   # 管道提前关闭
+$ vitals 2>/dev/null | head -1 >/dev/null ; echo ${PIPESTATUS[0]}   # vitals 自己的退出码
 0
 
 $ vitals --nope ; echo $?
@@ -395,7 +399,7 @@ error: unexpected argument '--nope' found
 | `XDG_CONFIG_HOME` | 默认配置目录；必须是绝对路径，相对路径会被忽略并回退到 `$HOME/.config` | `src/config/path.rs:27`；另见 `src/collectors/ini.rs:357`、`src/collectors/terminal_font.rs:126` |
 | `HOME` | `XDG_CONFIG_HOME` 未设（或不是绝对路径）时的回退；`when-file-exists` 里 `~/` 的展开；若干模块的候选路径 | `src/config/path.rs:28`、`src/conditions.rs:182`、`src/collectors/ini.rs:358`、`src/collectors/ini.rs:491`、`src/collectors/terminal_font.rs:130`、`src/collectors/pkgdb.rs:240`、`src/collectors/pkgdb.rs:259`、`src/collectors/rust.rs:37` |
 | `PATH` | `when-command-exists` 条件的查找范围（只查 PATH，不执行命令） | `src/conditions.rs:118` |
-| `NO_COLOR` | 设为任意值即禁用颜色（等同 `--no-color`） | anstream 读取；`src/main.rs:143-150` 构造输出流，说明见 `src/render/theme.rs:4` |
+| `NO_COLOR` | 设为任意值即禁用颜色（等同 `--no-color`） | anstream 读取；`src/main.rs:145-152` 构造输出流，说明见 `src/render/theme.rs:4` |
 | `CLICOLOR_FORCE` | 非空时即使输出是管道也强制保留颜色 | 同上；实测 `CLICOLOR_FORCE=1 vitals --module os --logo none \| cat -v` 会打印 `^[[1m^[[36mOS^[[0m: ...` |
 | `COLUMNS` | 拿不到 tty 尺寸时用它当终端列数；列数未知就不隐藏 Logo（`COLUMNS=40 vitals` 会把 Logo 收掉） | `src/render/text.rs:320` |
 

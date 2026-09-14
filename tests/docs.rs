@@ -165,6 +165,9 @@ fn the_completions_know_every_option_and_logo() {
         std::fs::read_to_string(root().join("completions/vitals.bash")).expect("该有 bash 补全");
     let zsh = std::fs::read_to_string(root().join("completions/_vitals")).expect("该有 zsh 补全");
 
+    let fish =
+        std::fs::read_to_string(root().join("completions/vitals.fish")).expect("该有 fish 补全");
+
     let flags = flags_in_help();
     assert!(
         flags.len() >= 10,
@@ -173,6 +176,14 @@ fn the_completions_know_every_option_and_logo() {
     for flag in &flags {
         assert!(bash.contains(flag.as_str()), "bash 补全里缺 {flag}");
         assert!(zsh.contains(flag.as_str()), "zsh 补全里缺 {flag}");
+
+        // fish 的长选项写成 `complete -l name`，短选项写成 `-s h`。
+        let name = flag.trim_start_matches('-');
+        if name.len() == 1 {
+            assert!(fish.contains(&format!("-s {name}")), "fish 补全里缺 {flag}");
+        } else {
+            assert!(fish.contains(&format!("-l {name}")), "fish 补全里缺 {flag}");
+        }
     }
 
     // 内置 Logo 的名字也要在补全里（加了一张图就得补上）。
@@ -188,6 +199,7 @@ fn the_completions_know_every_option_and_logo() {
     for logo in logos {
         assert!(bash.contains(&logo), "bash 补全里缺 logo {logo}");
         assert!(zsh.contains(&logo), "zsh 补全里缺 logo {logo}");
+        assert!(fish.contains(&logo), "fish 补全里缺 logo {logo}");
     }
 }
 
@@ -330,14 +342,18 @@ fn references_in(prose: &str) -> Vec<String> {
 }
 
 /// 代码块里去掉注释后的每一行（注释允许翻译，其余一个字都不许动）。
-fn code_lines(text: &str) -> Vec<String> {
+/// 拆出每个代码块：（语言标记，去掉注释后的行）。
+fn blocks(text: &str) -> Vec<(String, Vec<String>)> {
     let mut out = Vec::new();
     let mut lang = String::new();
+    let mut lines: Vec<String> = Vec::new();
     let mut inside = false;
+
     for line in text.lines() {
         let trimmed = line.trim_start();
         if trimmed.starts_with("```") {
             if inside {
+                out.push((lang.clone(), std::mem::take(&mut lines)));
                 inside = false;
             } else {
                 inside = true;
@@ -348,13 +364,14 @@ fn code_lines(text: &str) -> Vec<String> {
         if !inside {
             continue;
         }
+
         let slashed = matches!(
             lang.as_str(),
             "js" | "javascript" | "jsonc" | "typescript" | "ts"
         );
         let hashed = matches!(
             lang.as_str(),
-            "" | "console" | "bash" | "sh" | "zsh" | "toml"
+            "" | "console" | "bash" | "sh" | "zsh" | "toml" | "fish"
         );
         let stripped = if slashed {
             line.find("//")
@@ -370,9 +387,28 @@ fn code_lines(text: &str) -> Vec<String> {
         } else {
             line.trim_end()
         };
-        out.push(normalise_annotation(stripped));
+        lines.push(normalise_annotation(stripped));
     }
+
     out
+}
+
+/// 一个代码块里「两边必须一字不差」的行。
+///
+/// 两类：`$ ` 开头的命令行，以及 `vitals 0.1.2` 这种 `--version` 的输出——版本号
+/// 两边本来就该一样。其余都是程序输出，跟着 `VITALS_LANG` 走：英文版引英文输出、
+/// 中文版引中文输出，本来就不该相同。`vitals:` 开头的是诊断行（输出），不算命令。
+fn command_lines(lines: &[String]) -> Vec<&String> {
+    lines
+        .iter()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            trimmed.starts_with("$ ")
+                || trimmed
+                    .strip_prefix("vitals ")
+                    .is_some_and(|rest| rest.starts_with(char::is_numeric))
+        })
+        .collect()
 }
 
 /// 翻译时唯一允许动的「非注释」字眼：两句作者标注，它们不属于程序输出。
@@ -398,10 +434,29 @@ fn the_paired_documents_carry_the_same_hard_content() {
             references_in(&prose(&en)),
             "docs/{name}.md 与英文版的 src:行号 引用对不上"
         );
+        let zh_blocks = blocks(&zh);
+        let en_blocks = blocks(&en);
         assert_eq!(
-            code_lines(&zh),
-            code_lines(&en),
-            "docs/{name}.md 与英文版的代码块对不上（注释可以翻，命令与输出不行）"
+            zh_blocks.len(),
+            en_blocks.len(),
+            "docs/{name}.md 与英文版的代码块数量对不上"
         );
+        for (index, (zh_block, en_block)) in zh_blocks.iter().zip(&en_blocks).enumerate() {
+            let at = index + 1;
+            assert_eq!(
+                zh_block.0, en_block.0,
+                "docs/{name}.md 第 {at} 个代码块的语言标记对不上"
+            );
+            assert_eq!(
+                zh_block.1.len(),
+                en_block.1.len(),
+                "docs/{name}.md 第 {at} 个代码块的行数对不上（输出可以换语言，结构不该变）"
+            );
+            assert_eq!(
+                command_lines(&zh_block.1),
+                command_lines(&en_block.1),
+                "docs/{name}.md 第 {at} 个代码块里的命令行对不上"
+            );
+        }
     }
 }

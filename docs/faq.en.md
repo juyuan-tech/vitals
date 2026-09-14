@@ -14,23 +14,23 @@ vitals's algorithm is `MemTotal - MemAvailable` (`src/collectors/memory.rs` +
 
 ```console
 $ free -h | head -2
-               总计        已用        空闲        共享   缓冲/缓存        可用
-内存：         30Gi        22Gi       494Mi       4.7Gi        10Gi       7.9Gi
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi       5.4Gi        23Gi       152Mi       1.8Gi        25Gi
 
 $ vitals --json --module memory --logo none | jq -r '.entries[].value'
-22.75 GiB / 30.65 GiB (74%)
+5.41 GiB / 30.65 GiB (18%)
 
 $ grep -E '^MemTotal|^MemAvailable' /proc/meminfo
-MemTotal:       32140260 kB     # 30.65 GiB
-MemAvailable:    8281996 kB     #  7.90 GiB
+MemTotal:       32140256 kB     # 30.65 GiB
+MemAvailable:   26470216 kB     #  25.24 GiB
 ```
 
-32140260 − 8281996 = 23858264 kB = 22.75 GiB — exactly what vitals prints. `free` prints `22Gi`
+32140256 − 26470216 = 5670040 kB = 5.41 GiB — exactly what vitals prints. `free` prints `5.4Gi`
 because it rounds by GiB.
 
 ## Can the numbers in `--json` be used for calculations?
 
-No. `value` is exactly that line on the screen, with units meant for humans to read (`22.75 GiB`, `74%`, `1 day, 7 hours`),
+No. `value` is exactly that line on the screen, with units meant for humans to read (`5.41 GiB`, `18%`, `1 day, 7 hours`),
 and `uptime`, `memory`, `cpu`, `net-io`, `disk-io`, `top` are different every time. **This JSON has no raw
 numeric field.**
 
@@ -62,9 +62,9 @@ and modules like `kernel` (system calls),
 
 ```console
 $ vitals --sources --module kernel,wm,terminal
-kernel    没有读文件  （数据来自环境变量或系统调用）
-wm        没有读文件  （数据来自环境变量或系统调用）
-terminal  没有读文件  （数据来自环境变量或系统调用）
+kernel    no files read  (data comes from environment variables or system calls)
+wm        no files read  (data comes from environment variables or system calls)
+terminal  no files read  (data comes from environment variables or system calls)
 ```
 
 ## Why do modules with a sampling window wait 200 ms?
@@ -109,8 +109,8 @@ Because it is conditional: when the condition is not met it is skipped, and skip
 
 ```console
 $ vitals --explain --module os,gamepad
-os       显示  1 项
-gamepad  空  这台机器上没有可显示的数据
+os       shown  1 item
+gamepad  empty  nothing to show on this machine
 ```
 
 ## Can the help be switched to English?
@@ -125,7 +125,10 @@ $ export VITALS_LANG=en         # or keep using English
 When `VITALS_LANG` is not set, `LC_ALL` / `LC_MESSAGES` / `LANG` are consulted; **when in doubt, Chinese is used**,
 so "setting nothing" is still the original behavior. The priority table and the detailed rules are in [`cli.md`](cli.en.md#language).
 
-Only the help changes: `--explain`, `--sources`, and error messages are still Chinese for now.
+The help **and the runtime text** both follow it: `--explain`, `--sources`, error messages, and
+even the commented template `--gen-config` prints (one Chinese, one English, identical in
+content). The field names (`OS:`, `Memory:`) were English to begin with, so they look the same
+in both languages.
 
 ## How do I add a module?
 

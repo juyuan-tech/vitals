@@ -3,7 +3,9 @@
 //! 这里只干三件事：决定退出码、决定往哪个流写、把逻辑交给 lib。
 //! 采集、渲染、配置都不在这一层——`main` 里若出现处理业务的循环，说明放错了地方。
 
+use std::fmt::Write as _;
 use std::io;
+use std::io::Write as _;
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -16,6 +18,7 @@ use vitals_rs::conditions;
 use vitals_rs::config::{self, ModuleEntry, ModuleType};
 use vitals_rs::core::dispatch::{Failure, RunOutcome};
 use vitals_rs::core::render::{RenderError, Renderer, Report};
+use vitals_rs::i18n;
 use vitals_rs::lang::Lang;
 use vitals_rs::render::json::JsonRenderer;
 use vitals_rs::render::logo;
@@ -30,8 +33,10 @@ use vitals_rs::{COLLECTORS, Context, Dispatcher, PROGRAM, Platform};
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 fn main() -> ExitCode {
-    // 语言要在解析之前定下来：它决定帮助文本用哪一套。
-    let matches = cli::command(Lang::resolve()).get_matches();
+    // 语言要在解析之前定下来：它决定帮助文本、运行期文案和 `--gen-config` 用哪一套。
+    let lang = Lang::resolve();
+    vitals_rs::lang::set_current(lang);
+    let matches = cli::command(lang).get_matches();
     let cli = match Cli::from_arg_matches(&matches) {
         Ok(cli) => cli,
         Err(error) => error.exit(),
@@ -39,15 +44,15 @@ fn main() -> ExitCode {
 
     // 这两个是「问完就走」的参数：不读配置文件、不采集。
     if cli.gen_config {
-        print!("{}", config::default_toml());
-        return ExitCode::SUCCESS;
+        return write_stdout(config::default_toml());
     }
 
     if cli.list_modules {
+        let mut report = String::new();
         for module in ModuleType::ALL {
-            println!("{}", module.name());
+            let _ = writeln!(report, "{}", module.name());
         }
-        return ExitCode::SUCCESS;
+        return write_stdout(&report);
     }
 
     let config = match config::load(cli.config.as_deref()) {
@@ -75,7 +80,7 @@ fn render(settings: &Settings) -> ExitCode {
     let release = match os_release::read() {
         Ok(release) => release,
         Err(error) => {
-            eprintln!("{PROGRAM}: 读取 os-release 失败：{error}");
+            eprintln!("{PROGRAM}: {}", i18n::now().os_release_failed(error));
             None
         }
     };
@@ -97,9 +102,8 @@ fn render(settings: &Settings) -> ExitCode {
     if settings.verbose {
         for skipped in &plan.skipped {
             eprintln!(
-                "{PROGRAM}: 跳过 {}：{}",
-                skipped.module,
-                skipped.reason.describe()
+                "{PROGRAM}: {}",
+                i18n::now().skipped(skipped.module, &skipped.reason.describe())
             );
         }
     }
@@ -111,8 +115,10 @@ fn render(settings: &Settings) -> ExitCode {
 
     // `--explain` 对着**结果**说话，而不是对着配置：显示 / 空 / 跳过 / 失败，
     // 四种状态各有理由。它天然要真跑一遍采集，否则「空」和「显示」分不出来。
+    let mut report = String::new();
+
     if settings.explain {
-        explain(&settings.modules, &plan, &outcome);
+        explain(&mut report, &settings.modules, &plan, &outcome);
     }
 
     // `--sources` 说依据：每个模块**实际读了哪些文件**。记录发生在读取那一层
@@ -121,11 +127,11 @@ fn render(settings: &Settings) -> ExitCode {
     // 两个都给就两份都打（`--help` 里就是这么承诺的：「先打状态、再打依据」）。
     // 早先这里在 explain 之后直接 return，等于把 `--sources` 吞掉了。
     if settings.sources {
-        print_sources(&settings.modules, &plan, &outcome);
+        print_sources(&mut report, &settings.modules, &plan, &outcome);
     }
 
     if settings.explain || settings.sources {
-        return ExitCode::SUCCESS;
+        return write_stdout(&report);
     }
 
     // Logo：auto 按发行版匹配；none 不画；给了名字就用名字，找不到退回通用那张。
@@ -172,13 +178,35 @@ fn render(settings: &Settings) -> ExitCode {
     }
 }
 
+/// 把一整段报告写到 stdout；管道下游先走了就当正常收场。
+///
+/// `println!` / `print!` 在写 stdout 失败时会 panic（退出码 101，stderr 上一串 panic
+/// 噪音）——`vitals --explain | head -1` 以前就是这样。渲染那条路早就按 Unix 惯例
+/// 安静收场了，这里让另外几个「打印一段文本」的命令跟上：`--gen-config`、
+/// `--list-modules`、`--explain`、`--sources`。
+fn write_stdout(text: &str) -> ExitCode {
+    let mut out = io::stdout().lock();
+
+    match out.write_all(text.as_bytes()).and_then(|()| out.flush()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+        Err(_) => {
+            eprintln!("{PROGRAM}: {}", i18n::now().write_failed());
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// 把模块失败写到 stderr。
 ///
 /// 默认只说清楚「哪个模块失败了」；`--verbose` 才把完整错误链摊开——
 /// `CollectError` 里挂着底层原因，一路 `source()` 走到底。
 fn report_failures(failures: &[Failure], verbose: bool) {
     for failure in failures {
-        eprintln!("{PROGRAM}: {} 模块失败：{}", failure.module, failure.error);
+        eprintln!(
+            "{PROGRAM}: {}",
+            i18n::now().module_failed(&failure.module, &failure.error)
+        );
 
         if !verbose {
             continue;
@@ -186,7 +214,7 @@ fn report_failures(failures: &[Failure], verbose: bool) {
 
         let mut cause = std::error::Error::source(&failure.error);
         while let Some(error) = cause {
-            eprintln!("{PROGRAM}:   因为：{error}");
+            eprintln!("{PROGRAM}: {}", i18n::now().because(error));
             cause = error.source();
         }
     }
@@ -200,7 +228,12 @@ fn report_failures(failures: &[Failure], verbose: bool) {
 ///
 /// 四种状态各自给一句能追下去的理由：跳过给条件（平台/命令/路径），失败给错误原因，
 /// 显示给条数，空就说这台机器上没有。
-fn explain(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcome) {
+fn explain(
+    out: &mut String,
+    modules: &[ModuleEntry],
+    plan: &conditions::Plan,
+    outcome: &RunOutcome,
+) {
     let width = modules
         .iter()
         .map(|entry| entry.module_type.name().len())
@@ -212,9 +245,9 @@ fn explain(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcom
 
         let (state, detail) =
             if let Some(skipped) = plan.skipped.iter().find(|item| item.module == name) {
-                ("跳过", skipped.reason.describe())
+                (i18n::now().state_skipped(), skipped.reason.describe())
             } else if let Some(failure) = outcome.failures.iter().find(|item| item.module == name) {
-                ("失败", failure.error.to_string())
+                (i18n::now().state_failed(), failure.error.to_string())
             } else {
                 let count = outcome
                     .entries
@@ -223,16 +256,16 @@ fn explain(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcom
                     .count();
 
                 if count == 0 {
-                    ("空", "这台机器上没有可显示的数据".to_owned())
+                    (i18n::now().state_empty(), i18n::now().no_data().to_owned())
                 } else {
-                    ("显示", format!("{count} 项"))
+                    (i18n::now().state_shown(), i18n::now().items(count))
                 }
             };
 
         // 理由里可能有路径（`跳过` 就是一条路径），同样过一遍清洗再打印。
         let detail = vitals_rs::render::sanitize::sanitize(&detail);
 
-        println!("{name:width$}  {state}  {detail}");
+        let _ = writeln!(out, "{name:width$}  {state}  {detail}");
     }
 }
 
@@ -241,7 +274,12 @@ fn explain(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcom
 /// 它是运行时记录下来的（见 `core::sources`），不是每个模块手写的一张表——表会跟代码
 /// 漂移，记录不会。一个模块如果什么文件都没碰（数据来自环境变量或系统调用），这里会
 /// **明说没有**，而不是编一个来源出来。
-fn print_sources(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &RunOutcome) {
+fn print_sources(
+    out: &mut String,
+    modules: &[ModuleEntry],
+    plan: &conditions::Plan,
+    outcome: &RunOutcome,
+) {
     let width = modules
         .iter()
         .map(|entry| entry.module_type.name().len())
@@ -252,7 +290,11 @@ fn print_sources(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &Run
         let name = entry.module_type.name();
 
         if let Some(skipped) = plan.skipped.iter().find(|item| item.module == name) {
-            println!("{name:width$}  跳过  {}", skipped.reason.describe());
+            let _ = writeln!(
+                out,
+                "{name:width$}  {}",
+                i18n::now().sources_skipped(&skipped.reason.describe())
+            );
 
             continue;
         }
@@ -264,7 +306,7 @@ fn print_sources(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &Run
             .map_or(&[][..], |item| item.paths.as_slice());
 
         if paths.is_empty() {
-            println!("{name:width$}  没有读文件  （数据来自环境变量或系统调用）");
+            let _ = writeln!(out, "{name:width$}  {}", i18n::now().sources_no_files());
         } else {
             // 路径是拼出来的（`$HOME`、`$TZ`、`$XDG_CONFIG_HOME` 都参与），
             // 所以它跟模块的值一样是外部字符串，打印前必须过一遍清洗。
@@ -273,7 +315,7 @@ fn print_sources(modules: &[ModuleEntry], plan: &conditions::Plan, outcome: &Run
                 .map(|path| vitals_rs::render::sanitize::sanitize(path).into_owned())
                 .collect();
 
-            println!("{name:width$}  {}", listed.join(", "));
+            let _ = writeln!(out, "{name:width$}  {}", listed.join(", "));
         }
     }
 }

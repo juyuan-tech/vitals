@@ -1,0 +1,116 @@
+# Vitals config
+#
+# Printed by `vitals --gen-config`. This file **replaces the whole list** of built-in
+# defaults: once modules is written, the built-in list no longer takes effect, so to
+# show fewer modules you have to list all the ones you want to keep.
+#
+# What follows is exactly the built-in default view, matching item for item what
+# fastfetch 2.68.1 prints when **run with no arguments** (the two were compared side by
+# side on a real machine): OS → Host → Kernel → Uptime → Packages → Shell → Display →
+# WM → Cursor → Terminal → Terminal Font → CPU → GPU → Memory → Swap → Disk →
+# Local IP → Battery → Locale.
+#
+# Earlier this file also carried bios/board/chassis/bootmgr,
+# wmtheme/theme/icons/font, processes/loadavg/power-adapter/rust — that was written
+# after the default structure in fastfetch's **documentation**, and its no-argument run
+# does not print those. Keeping them only drowned what should be seen at a glance, so
+# they were cut; to show them, name them with `--module` or list them in this file.
+
+config_version = 1
+
+# Order is display order. For the available choices see `vitals --list-modules`.
+#
+# Every module can carry conditions; when one is not satisfied the module is skipped —
+# a skip is not an error, it just means this machine has nothing to show (a desktop has
+# no battery).
+#
+#   platforms           only collect on these platforms. Values: linux, macos, windows,
+#                       freebsd, openbsd, netbsd, android, solaris, illumos
+#   when-command-exists skip if the command is not on PATH. **Only PATH is checked;
+#                       the command is never executed**
+#   when-file-exists    skip if the path does not exist; a leading ~/ expands to $HOME
+#
+# Examples:
+#
+#   [[modules]]
+#   type = "bios"
+#
+#   [[modules]]
+#   type = "disk"
+#   when-file-exists = "/dev/nvme0n1"
+#
+#   [[modules]]
+#   type = "brightness"
+#   when-file-exists = "/sys/class/backlight"
+
+[[modules]]
+type = "title"
+
+[[modules]]
+type = "separator"
+
+[[modules]]
+type = "os"
+
+[[modules]]
+type = "host"
+
+[[modules]]
+type = "kernel"
+
+[[modules]]
+type = "uptime"
+
+[[modules]]
+type = "packages"
+
+[[modules]]
+type = "shell"
+
+[[modules]]
+type = "display"
+
+[[modules]]
+type = "de"
+
+[[modules]]
+type = "wm"
+
+[[modules]]
+type = "cursor"
+
+[[modules]]
+type = "terminal"
+
+[[modules]]
+type = "terminal-font"
+
+[[modules]]
+type = "cpu"
+
+[[modules]]
+type = "gpu"
+
+[[modules]]
+type = "memory"
+
+[[modules]]
+type = "swap"
+
+[[modules]]
+type = "disk"
+
+[[modules]]
+type = "local-ip"
+
+[[modules]]
+type = "battery"
+
+[[modules]]
+type = "locale"
+
+[[modules]]
+type = "break"
+
+[[modules]]
+type = "colors"

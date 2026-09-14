@@ -1,4 +1,4 @@
-.TH VITALS 1 "2026-09-13" "vitals 0.1.1" "User Commands"
+.TH VITALS 1 "2026-09-14" "vitals 0.1.2" "User Commands"
 .SH NAME
 vitals \- your system's vitals, all at a glance
 .SH SYNOPSIS
@@ -125,9 +125,10 @@ Help language, \fBzh\fR or \fBen\fR. Without it the locale decides
 .RB ( LC_ALL ,
 .BR LC_MESSAGES ,
 .BR LANG )
-and anything unclear means Chinese. Runtime messages (\fB\-\-explain\fR,
+and anything unclear means Chinese. It covers the help and the runtime
+messages (\fB\-\-explain\fR,
 .BR \-\-sources ,
-errors) are currently Chinese only; the help is bilingual.
+errors) alike.
 .TP
 .B NO_COLOR
 Turn colors off (same as
@@ -166,6 +167,10 @@ Several modules read further variables of their own
 .BR XDG_* );
 the full list is in
 .IR docs/cli.md .
+.PP
+.B \-\-gen\-config
+prints an annotated template: a Chinese one under a Chinese interface and an
+English one under an English interface, both describing the same built-in default.
 .SH "EXIT STATUS"
 .TP
 .B 0

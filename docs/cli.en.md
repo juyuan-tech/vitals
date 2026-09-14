@@ -2,7 +2,7 @@
 
 **English** | [中文](cli.md)
 
-This document describes the command-line behavior of `vitals` (version 0.1.1). The command line has only options and no positional arguments; giving one extra positional argument ends with exit code 2.
+This document describes the command-line behavior of `vitals` (version 0.1.2). The command line has only options and no positional arguments; giving one extra positional argument ends with exit code 2.
 
 Every command in this document was really executed on this machine, and the output excerpts are captured verbatim (truncated where too long, with no values rewritten).
 
@@ -10,7 +10,7 @@ Every command in this document was really executed on this machine, and the outp
 Usage: vitals [OPTIONS]
 ```
 
-`-h` prints a summary (its first line is the English tagline `Your system's vitals, all at a glance.`), and `--help` prints the full description (its first line is the Chinese `你的系统生命体征，一眼看全。`). Both list the same set of options.
+`-h` prints a summary, and `--help` prints the full description; both start with the same tagline (`Your system's vitals, all at a glance.` in English), which — like the rest of the help — follows the language rules below. Both list the same set of options.
 
 ## Options at a glance
 
@@ -36,6 +36,7 @@ Usage: vitals [OPTIONS]
 Specifies the config file. When omitted, it looks at `$XDG_CONFIG_HOME/vitals/config.toml`.
 
 When a path is given explicitly, failing to read the file is an **error**: it writes one line `vitals: ...` to stderr, exit code 1, and renders nothing.
+Config files also have an 8 MiB read cap (the same number the collectors use): pointing `--config` at something like `/dev/zero` will not read the whole thing into memory.
 
 ```
 $ vitals --config /tmp/vxdg/vitals/config.toml --logo none
@@ -47,7 +48,7 @@ The config file does not exist:
 
 ```
 $ vitals --config /tmp/definitely-missing-vitals.toml ; echo $?
-vitals: 读取配置文件 /tmp/definitely-missing-vitals.toml 失败：No such file or directory (os error 2)
+vitals: failed to read config file /tmp/definitely-missing-vitals.toml: No such file or directory (os error 2)
 1
 ```
 
@@ -55,7 +56,7 @@ The config file exists but fails to parse (TOML syntax error, unknown module typ
 
 ```
 $ vitals --config /tmp/vbad.toml ; echo $?
-vitals: /tmp/vbad.toml 解析失败
+vitals: failed to parse /tmp/vbad.toml
 TOML parse error at line 4, column 8
   |
 4 | type = "not-a-module"
@@ -66,7 +67,7 @@ unknown variant `not-a-module`, expected one of `os`, `host`, ...(truncated)
 
 ```
 $ vitals --config /tmp/vver.toml ; echo $?
-vitals: 配置版本 99 高于本程序支持的 1，请升级 vitals
+vitals: config version 99 is newer than version 1, the newest this build supports; upgrade vitals
 1
 ```
 
@@ -103,7 +104,7 @@ When `--json` is given together with `--explain` or `--sources`, the JSON does n
 
 ```
 $ vitals --module memory --explain --json
-memory  显示  1 项
+memory  shown  1 item
 ```
 
 ## `--logo <auto|none|NAME>`
@@ -156,7 +157,7 @@ An unknown module is rejected already at the argument-parsing stage, exit code 2
 
 ```
 $ vitals --module nope ; echo $?
-error: invalid value 'nope' for '--module <列表>': 未知模块 `nope`；可用：os, host, kernel, bios, ...(truncated)
+error: invalid value 'nope' for '--module <LIST>': unknown module `nope`; available: os, host, kernel, bios, ...(truncated)
 2
 ```
 
@@ -164,12 +165,12 @@ error: invalid value 'nope' for '--module <列表>': 未知模块 `nope`；可�
 
 ```
 $ vitals --config /tmp/vcond.toml --module battery --logo none --explain
-battery  显示  1 项
+battery  shown  1 item
 
 $ vitals --config /tmp/vcond.toml --logo none --explain
-os       显示  1 项
-battery  跳过  路径 /definitely/not/here 不存在
-camera   显示  2 项
+os       shown  1 item
+battery  skipped  the path /definitely/not/here does not exist
+camera   shown  2 items
 ```
 
 ## `--no-color`
@@ -211,16 +212,16 @@ $ vitals --list-modules --config /tmp/nope-vitals.toml >/dev/null ; echo $?
 
 ## `--gen-config`
 
-Prints the built-in default config to stdout (2422 bytes, ending with a newline), does not read the config file and does not collect; given together with other options it still succeeds as usual:
+Prints the built-in default config to stdout (**the template follows the language**: 2422 bytes for Chinese, 2655 for English, both ending with a newline), does not read the config file and does not collect; given together with other options it still succeeds as usual:
 
 ```
 $ vitals --gen-config | head -6
-# Vitals 配置
+# Vitals config
 #
-# 由 `vitals --gen-config` 打印。这个文件**整体替换**内置默认：写了 modules，
-# 内置列表就不再生效，所以想少显示几个模块，得把要留的列全。
+# Printed by `vitals --gen-config`. This file **replaces the whole list** of built-in
+# defaults: once modules is written, the built-in list no longer takes effect, so to
+# show fewer modules you have to list all the ones you want to keep.
 #
-# 下面这份就是内置默认视图，与 fastfetch 2.68.1 **无参运行**时打印的逐项对得上
 ```
 
 ```
@@ -234,21 +235,21 @@ Writes diagnostic information to **stderr**, each line carrying the `vitals: ` p
 
 ```
 $ vitals --module os --verbose --logo none 2>&1 >/dev/null
-vitals: 模块 1 个：os
-vitals: logo=none 颜色=开 json=关 verbose=开
+vitals: 1 module: os
+vitals: logo=none color=on json=off verbose=on
 ```
 
 When there is a conditional skip it appends:
 
 ```
-vitals: 跳过 battery：路径 /definitely/not/here 不存在
+vitals: skipped battery: the path /definitely/not/here does not exist
 ```
 
 When a module fails to collect it prints a failure line; only `--verbose` goes on to lay out the underlying cause chain:
 
 ```
-vitals: datetime 模块失败：打开 /tmp/nozone/tz 失败
-vitals:   因为：Permission denied (os error 13)
+vitals: the datetime module failed: failed to open /tmp/nozone/tz
+vitals:   because: Permission denied (os error 13)
 ```
 
 `--verbose` does not affect the exit code, nor does it change the contents of stdout.
@@ -261,20 +262,20 @@ The report is written to stdout, exit code 0 — even if an item is a "failure".
 
 ```
 $ vitals --module memory --explain
-memory  显示  1 项
+memory  shown  1 item
 
 $ vitals --config /tmp/vcond.toml --explain
-os       显示  1 项
-battery  跳过  路径 /definitely/not/here 不存在
-camera   显示  2 项
+os       shown  1 item
+battery  skipped  the path /definitely/not/here does not exist
+camera   shown  2 items
 
 $ vitals --module gamepad,battery --explain
-gamepad  空  这台机器上没有可显示的数据
-battery  显示  1 项
+gamepad  empty  nothing to show on this machine
+battery  shown  1 item
 
 $ TZDIR=/tmp/nozone TZ=tz vitals --module datetime --explain
-vitals: datetime 模块失败：打开 /tmp/nozone/tz 失败        # stderr
-datetime  失败  打开 /tmp/nozone/tz 失败                  # stdout
+vitals: the datetime module failed: failed to open /tmp/nozone/tz    # stderr
+datetime  failed  failed to open /tmp/nozone/tz                      # stdout
 ```
 
 "Empty" and "skipped" are two different things: the former was collected, and this machine really has no data; the latter is a condition not being met, so it was never collected at all.
@@ -294,7 +295,7 @@ gpu     /sys/class/drm/card1/device/vendor, /sys/class/drm/card1/device/device, 
 ```
 $ vitals --config /tmp/vcond.toml --sources
 os       /etc/os-release
-battery  跳过  路径 /definitely/not/here 不存在
+battery  skipped  the path /definitely/not/here does not exist
 camera   /sys/class/video4linux/video0/name, /sys/class/video4linux/video1/name, /sys/class/video4linux/video2/name, /sys/class/video4linux/video3/name
 ```
 
@@ -302,7 +303,7 @@ A module that read nothing:
 
 ```
 $ vitals --module wm --sources
-wm  没有读文件  （数据来自环境变量或系统调用）
+wm  no files read  (data comes from environment variables or system calls)
 ```
 
 > Note: in 0.1.0 the `--explain` branch returned directly, and `--sources` was not executed — this
@@ -310,7 +311,7 @@ wm  没有读文件  （数据来自环境变量或系统调用）
 >
 > ```console
 > $ vitals --module memory --explain --sources
-> memory  显示  1 项
+> memory  shown  1 item
 > memory  /proc/meminfo
 > ```
 
@@ -322,15 +323,17 @@ Both end with exit code 0, and their contents are written to stdout.
 
 ```
 $ vitals --version
-vitals 0.1.1
+vitals 0.1.2
 ```
 
 `-h` is the short help (one line per option), `--help` is the long help (with multiple paragraphs of explanation); both languages keep this distinction.
 
 ## Language
 
-The help text has two sets, Chinese and English, both shipped with the binary, and no language pack is needed. Field names (`OS:`, `Memory:`) are
-English to begin with; runtime text (`--explain`, `--sources`, error messages) currently **has Chinese only**.
+The help text has two sets, Chinese and English, both shipped with the binary, and no language pack is needed. Field names (`OS:`, `Memory:`)
+are English in both languages; **runtime text** has two sets as well — the four states of `--explain`, the "no files read" of `--sources`, the
+settings line of `--verbose`, error messages, and the commented template printed by `--gen-config` (Chinese template `config/default.toml`,
+English template `config/default.en.toml`, with the same structure) — all selected by the rules below.
 
 Which set is chosen follows this order, first hit wins:
 
@@ -368,15 +371,15 @@ Exit codes (three kinds, all actually tested):
 | Exit code | When it occurs |
 | --- | --- |
 | `0` | Normal termination: successful render, `--help`, `--version`, `--list-modules`, `--gen-config`, `--explain`, `--sources`. **A module that fails to collect but renders successfully is still 0** (the failure is only written to stderr). A downstream that closes the pipe early (e.g. `vitals \| head -1`) also returns 0. |
-| `1` | Runtime failure: config file read/parse/version errors; failing to write out output (e.g. `vitals > /dev/full`, with stderr `vitals: 写入输出失败`). |
+| `1` | Runtime failure: config file read/parse/version errors; failing to write out output (e.g. `vitals > /dev/full`, with stderr `vitals: failed to write output`). |
 | `2` | Argument error: unknown option, unknown module, one extra positional argument. Produced by clap. |
 
 ```
 $ vitals --module os --logo none >/dev/full ; echo $?
-vitals: 写入输出失败
+vitals: failed to write output
 1
 
-$ vitals 2>/dev/null | head -1 >/dev/null ; echo $?   # pipe closed early
+$ vitals 2>/dev/null | head -1 >/dev/null ; echo ${PIPESTATUS[0]}   # vitals's own exit code
 0
 
 $ vitals --nope ; echo $?
@@ -395,7 +398,7 @@ For the variables below, the read locations have all been confirmed in the `src/
 | `XDG_CONFIG_HOME` | The default config directory; it must be an absolute path, a relative path is ignored and falls back to `$HOME/.config` | `src/config/path.rs:27`; see also `src/collectors/ini.rs:357`, `src/collectors/terminal_font.rs:126` |
 | `HOME` | The fallback when `XDG_CONFIG_HOME` is unset (or is not an absolute path); expansion of `~/` in `when-file-exists`; a candidate path for several modules | `src/config/path.rs:28`, `src/conditions.rs:182`, `src/collectors/ini.rs:358`, `src/collectors/ini.rs:491`, `src/collectors/terminal_font.rs:130`, `src/collectors/pkgdb.rs:240`, `src/collectors/pkgdb.rs:259`, `src/collectors/rust.rs:37` |
 | `PATH` | The lookup scope of the `when-command-exists` condition (it only searches PATH, it does not execute the command) | `src/conditions.rs:118` |
-| `NO_COLOR` | Setting it to any value disables colors (equivalent to `--no-color`) | read by anstream; `src/main.rs:143-150` constructs the output stream, see `src/render/theme.rs:4` for the explanation |
+| `NO_COLOR` | Setting it to any value disables colors (equivalent to `--no-color`) | read by anstream; `src/main.rs:145-152` constructs the output stream, see `src/render/theme.rs:4` for the explanation |
 | `CLICOLOR_FORCE` | When non-empty, it forces colors to be kept even if the output is a pipe | same as above; tested `CLICOLOR_FORCE=1 vitals --module os --logo none \| cat -v` prints `^[[1m^[[36mOS^[[0m: ...` |
 | `COLUMNS` | When the tty size cannot be obtained, it is used as the terminal column count; when the column count is unknown the logo is not hidden (`COLUMNS=40 vitals` will take the logo away) | `src/render/text.rs:320` |
 
@@ -472,12 +475,12 @@ $ vitals --module memory --json
 
 ```
 $ vitals --gen-config | head -6
-# Vitals 配置
+# Vitals config
 #
-# 由 `vitals --gen-config` 打印。这个文件**整体替换**内置默认：写了 modules，
-# 内置列表就不再生效，所以想少显示几个模块，得把要留的列全。
+# Printed by `vitals --gen-config`. This file **replaces the whole list** of built-in
+# defaults: once modules is written, the built-in list no longer takes effect, so to
+# show fewer modules you have to list all the ones you want to keep.
 #
-# 下面这份就是内置默认视图，与 fastfetch 2.68.1 **无参运行**时打印的逐项对得上
 ```
 
 **4. Check the data sources of a module**
@@ -492,8 +495,8 @@ gpu     /sys/class/drm/card1/device/vendor, /sys/class/drm/card1/device/device, 
 
 ```
 $ vitals --module gamepad,battery --explain
-gamepad  空  这台机器上没有可显示的数据
-battery  显示  1 项
+gamepad  empty  nothing to show on this machine
+battery  shown  1 item
 ```
 
 ## Relationship to the config file

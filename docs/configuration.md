@@ -6,7 +6,7 @@
 
 文中所有结论都来自三个地方：仓库源码（仓库根）、内置默认配置
 `src/config/default.toml`、以及对 `target/release/vitals` 的真实运行。每个键都给出
-`文件:行号`；每个行为后面都注明验证方式。版本：`vitals 0.1.1`（`vitals --version`）。
+`文件:行号`；每个行为后面都注明验证方式。版本：`vitals 0.1.2`（`vitals --version`）。
 
 配置文件的解析只有一条路径：`src/config.rs` 的 `load`，最终反序列化成
 `src/config/schema.rs` 里的 `ConfigFile`。除此以外没有别的配置来源。
@@ -24,10 +24,10 @@
 vitals --config /path/to/config.toml
 ```
 
-`--config <路径>` 由 `src/cli.rs:32-34` 定义，`src/main.rs:47-53` 把它交给
-`config::load`（`src/config.rs:61-75`）。**显式指定的文件必须能读到**：文件不存在、
-无权限或不是 UTF-8 都会报错并以退出码 1 结束（`src/config.rs:46-52`、`100-107`
-→ `src/main.rs:49-52`）。
+`--config <路径>` 由 `src/cli.rs:32-34` 定义，`src/main.rs:50-56` 把它交给
+`config::load`（`src/config.rs:105-119`）。**显式指定的文件必须能读到**：文件不存在、
+无权限或不是 UTF-8 都会报错并以退出码 1 结束（读取 `src/config.rs:61-64` 与上限 `src/config.rs:71-96`、解析与版本校验 `src/config.rs:122-136`
+→ `src/main.rs:52-55`）。
 
 实测：
 
@@ -46,12 +46,12 @@ vitals: 读取配置文件 /tmp/vitals-docs-tests/nope.toml 失败：No such fil
 2. 否则环境变量 `HOME` 存在 → `$HOME/.config/vitals/config.toml`
    （`src/config/path.rs:44`）。
 3. 两者都没有 → 没有默认路径，`config_path()` 返回 `None`
-   （`src/config/path.rs:22-23`、`src/config.rs:66-68`）。
+   （`src/config/path.rs:22-23`、`src/config.rs:110-112`）。
 
 相对路径 `vitals/config.toml` 这个常量在 `src/config/path.rs:18`。
 
-找到的路径**不存在时不报错**，安静地用内置默认（`src/config.rs:70-74`）——第一次
-运行的人不该看到报错。这是显式路径与默认路径唯一的行为差异（`src/config.rs:54-60`）。
+找到的路径**不存在时不报错**，安静地用内置默认（`src/config.rs:114-118`）——第一次
+运行的人不该看到报错。这是显式路径与默认路径唯一的行为差异（`src/config.rs:98-104`）。
 
 实测（每行一条真实运行）：
 
@@ -122,8 +122,9 @@ cursor, terminal, terminal-font, cpu, gpu, memory, swap, disk, local-ip,
 battery, locale, break, colors
 ```
 
-`src/config.rs:34-36` 里 `default_toml()` 就是 `include_str!("config/default.toml")`，
-`--gen-config` 原样打印它（`src/main.rs:35-38`）。实测 `vitals --gen-config` 的输出与
+`src/config.rs:37-39`–`46-51` 里 `default_toml_for()` 按语言选模板：中文 `include_str!("config/default.toml")`、
+英文 `include_str!("config/default.en.toml")`，两份解析回来是同一份 `Config`；
+`--gen-config` 原样打印选中那份（`src/main.rs:38-41`）。实测 `vitals --gen-config` 的输出与
 `/tmp/vitals-facts/gen-config.toml` 逐字节相同（`diff` 无差异）。
 
 ---
@@ -143,7 +144,7 @@ unknown field `foo`, expected one of `type`, `platforms`, `when-command-exists`,
 
 | 键 | 类型 | 默认值 | 作用 | 位置 |
 | --- | --- | --- | --- | --- |
-| `config_version` | 整数（u32） | `1`（省略时取 `CURRENT_CONFIG_VERSION`） | 声明这份文件针对哪个配置版本。**高于**程序支持的版本时拒绝启动 | 字段 `src/config/schema.rs:28-29`；默认值来源 `src/config/schema.rs:19-21`、`src/config.rs:26`；校验 `src/config.rs:84-89` |
+| `config_version` | 整数（u32） | `1`（省略时取 `CURRENT_CONFIG_VERSION`） | 声明这份文件针对哪个配置版本。**高于**程序支持的版本时拒绝启动 | 字段 `src/config/schema.rs:28-29`；默认值来源 `src/config/schema.rs:19-21`、`src/config.rs:29`；校验 `src/config.rs:128-133` |
 | `modules` | `[[modules]]` 数组表 | 省略 = 内置默认 24 项 | 要显示的模块，**顺序即显示顺序**；写了就整体替换内置默认 | 字段 `src/config/schema.rs:36`；覆盖逻辑 `src/config/schema.rs:48-50`；默认列表 `src/config/schema.rs:429-455` |
 
 `config_version` 的边界行为（都实测过）：
@@ -151,7 +152,7 @@ unknown field `foo`, expected one of `type`, `platforms`, `when-command-exists`,
 - 省略 → 按 `1` 处理，正常。
 - 等于 `1`（`CURRENT_CONFIG_VERSION`）→ 正常。
 - 小于 `1`，例如 `0` → **不报错**，正常渲染。校验只有「高于」这一条
-  （`src/config.rs:84`）。
+  （`src/config.rs:128`）。
 - 大于 `1`，例如 `2` → 退出码 1，原文：`vitals: 配置版本 2 高于本程序支持的 1，请升级 vitals`。
 - 类型不是整数，例如 `config_version = "1"` → TOML 解析失败，退出码 1
   （`invalid type: string "1", expected u32`）。
@@ -226,7 +227,7 @@ linux, macos, windows, freebsd, openbsd, netbsd, android, solaris, illumos
 跳过原因（`src/conditions.rs:84-102`）。
 
 条件在采集之前统一评估，调度器只看到最终名单（`src/conditions.rs:10`、`64-78`；
-`src/main.rs:87`）。
+`src/main.rs:90`）。
 
 ### 4.1 三个条件各自怎么判
 
@@ -263,8 +264,9 @@ linux, macos, windows, freebsd, openbsd, netbsd, android, solaris, illumos
 
 ### 4.2 跳过时看到什么
 
-默认不出声（`src/main.rs:89-90`）。加 `--verbose` 会往 **stderr** 打一行
-（`src/main.rs:91-99`），文案来自 `SkipReason::describe()`（`src/conditions.rs:47-60`）：
+默认不出声（`src/main.rs:92-93`）。加 `--verbose` 会往 **stderr** 打一行
+（`src/main.rs:94-102`），文案来自 `SkipReason::describe()`（`src/conditions.rs:50-59`，
+四种理由的措辞在 `src/i18n.rs:214-244`）：
 
 | 原因 | 文案 | 实测输出 |
 | --- | --- | --- |
@@ -273,12 +275,12 @@ linux, macos, windows, freebsd, openbsd, netbsd, android, solaris, illumos
 | 路径不存在 | `路径 <路径> 不存在` | `vitals: 跳过 memory：路径 /nonexistent/vitals 不存在` |
 
 想区分「跳过」（条件挡住、根本没采）与「空」（采了但没数据）用 `--explain`
-（`src/main.rs:106-112`、`194-228`）。
+（`src/main.rs:108-114`、`194-228`）。
 
 ### 4.3 与 `--module` 的关系
 
 `--module` 是**选择**，不是过滤：点名的模块一定出现，而且会**丢掉配置里的条件**——
-显式点名是更强的意愿（`src/cli.rs:130-136`、`159-171`）。实测：配置里给 `memory` 挂了
+显式点名是更强的意愿（`src/cli.rs:124-134`、`src/i18n.rs:204`、`159-171`）。实测：配置里给 `memory` 挂了
 `platforms = ["windows"]` 和 `when-file-exists = "/nope"`，不带 `--module` 时被跳过；
 带 `--module memory` 时正常显示。
 
@@ -365,6 +367,7 @@ vitals: logo=none 颜色=关 json=关 verbose=开
 | 键 | 验证的写法 | 观察到的结果 |
 | --- | --- | --- |
 | `config_version` | `1` / `0` / 省略 | 正常渲染，退出码 0 |
+| 整份文件 | > 8 MiB | `超过读取上限（8388608 字节），拒绝读进内存`，退出码 1 |
 | `config_version` | `2` | `配置版本 2 高于本程序支持的 1，请升级 vitals`，退出码 1 |
 | `config_version` | `"1"` | TOML 解析失败，退出码 1 |
 | `modules` | 只写 `[[modules]] type = "memory"` | 只输出 Memory 一行 |

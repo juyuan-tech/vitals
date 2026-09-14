@@ -51,7 +51,7 @@ impl Collector for DateTime {
         let (name, offset) = match zone.as_ref() {
             Some((name, path)) => match offset_at(path, now)? {
                 Some(offset) => (name.clone(), offset),
-                None => (format!("{name} (读不了，按 UTC)"), 0),
+                None => (crate::i18n::now().timezone_unreadable(name), 0),
             },
             None => ("UTC".to_owned(), 0),
         };
@@ -150,7 +150,7 @@ fn locate_zone() -> Result<Option<(String, String)>, CollectError> {
 
     if std::path::Path::new(LOCALTIME).exists() {
         return Ok(Some((
-            "(从 /etc/localtime 读到的时区)".to_owned(),
+            crate::i18n::now().timezone_from_localtime().to_owned(),
             LOCALTIME.to_owned(),
         )));
     }

@@ -82,31 +82,25 @@ impl Collector for CpuUsage {
         let elapsed = started.elapsed();
 
         let Some(text) = read::text(PROC_STAT)? else {
-            return Err(CollectError::new(
-                "/proc/stat 在采样窗口里消失了，量不到 CPU 占用率",
-            ));
+            return Err(CollectError::new(crate::i18n::now().stat_gone()));
         };
         let after = parse(&text);
 
         let elapsed_ms = elapsed.as_millis() as u64;
         if elapsed_ms == 0 {
             return Err(CollectError::new(
-                "cpu-usage 的采样间隔是 0 毫秒，算不出占用率",
+                crate::i18n::now().cpu_usage_zero_interval(),
             ));
         }
 
         if before.len() != after.len() {
-            return Err(CollectError::new(format!(
-                "/proc/stat 的核数在采样窗口里从 {} 变成了 {}（CPU 热插拔？），这次算不出占用率",
-                before.len(),
-                after.len()
-            )));
+            return Err(CollectError::new(
+                crate::i18n::now().core_count_changed(before.len(), after.len()),
+            ));
         }
 
         let Some(percent) = usage_percent(&before, &after) else {
-            return Err(CollectError::new(
-                "/proc/stat 里有核的累计时间没有增长，这次算不出占用率",
-            ));
+            return Err(CollectError::new(crate::i18n::now().no_cpu_progress()));
         };
 
         Ok(vec![

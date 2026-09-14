@@ -29,7 +29,7 @@ pub(crate) fn is_physical(dir: &Path) -> Result<bool, CollectError> {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(source) => Err(CollectError::caused_by(
-            format!("查看 {} 失败", dir.join("device").display()),
+            crate::i18n::now().view_failed(dir.join("device").display()),
             source,
         )),
     }

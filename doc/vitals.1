@@ -1,4 +1,4 @@
-.TH VITALS 1 "2026-09-13" "vitals 0.1.1" "用户命令"
+.TH VITALS 1 "2026-09-14" "vitals 0.1.2" "用户命令"
 .SH NAME
 vitals \- 一眼看完这台机器的状态
 .SH SYNOPSIS
@@ -106,7 +106,25 @@ init\-system、bootmgr、processes、loadavg）；硬件 21；会话与桌面 16
 .PP
 示例配置见仓库的
 .IR presets/ 。
+.PP
+.B \-\-gen\-config
+打印一份带注释的模板：中文界面打印中文模板，英文界面打印英文模板，
+两份的内容一致（同一份内置默认视图）。
 .SH ENVIRONMENT
+.TP
+.B VITALS_LANG
+界面语言：
+.B zh
+或
+.BR en 。
+不设时看 locale（
+.BR LC_ALL 、
+.BR LC_MESSAGES 、
+.BR LANG
+），拿不准一律中文。帮助与运行期文案（
+.BR \-\-explain 、
+.BR \-\-sources 、
+错误信息）都跟着它走。
 .TP
 .B NO_COLOR
 设置后关闭颜色（同

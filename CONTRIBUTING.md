@@ -34,6 +34,7 @@ $ cargo fmt --all -- --check
 | `src/config.rs` + `src/config/` | 配置模型、内置默认配置（`default.toml`）、路径解析（`path.rs`） |
 | `src/cli.rs` | 参数解析 |
 | `src/conditions.rs` | 条件判断 |
+| `src/i18n.rs` + `src/lang.rs` | 运行期文案（中英各一套）与「这次用哪种语言」 |
 
 ## 加一个模块
 
@@ -44,6 +45,10 @@ $ cargo fmt --all -- --check
    `src/collectors/users.rs`、`bootmgr.rs`、`display.rs` 里已有的做法。
 4. 如果它要出现在默认视图里、或需要默认条件，同步 `src/config/default.toml`——
    注意 `--gen-config` 打印的就是这个文件本身（`include_str!`），改它就等于改模板。
+   **同目录下的 `default.en.toml` 是它的英文版**，两份要一起改：`tests/config.rs` 会把
+   两份都解析回来核对，只改一份就会红。
+5. 如果它会返回错误（`CollectError`），把消息写进 `src/i18n.rs` 的 `Messages` 里，不要
+   在采集器里写中文字面量：`tests` 里有一条测试逐条扫「英文文案里不许出现汉字」。
 5. 同步文档：`docs/modules.md` 对应条目、以及 `--sources` 能观测到的新路径。
 6. 把新模块加进 `presets/all.toml`（它必须等于 `--list-modules` 的全部模块）。
 

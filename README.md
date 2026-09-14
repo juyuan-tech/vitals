@@ -36,6 +36,7 @@ $ cargo install --path vitals
 ```console
 $ install -Dm644 completions/vitals.bash ~/.local/share/bash-completion/completions/vitals   # bash
 $ install -Dm644 completions/_vitals ~/.zsh/completions/_vitals                                 # zsh
+$ install -Dm644 completions/vitals.fish ~/.config/fish/completions/vitals.fish                 # fish
 ```
 
 前置条件：**Linux**（数据来自 `/proc` 与 `/sys`；代码里没有任何平台分支，其它系统未验证），
@@ -219,9 +220,8 @@ fastfetch 2.68.1 里我们没有的模块，以及原因：`Bluetooth`、`OpenGL
 要么需要发网络请求，要么依赖核心外的外部命令。`Custom` 还没有做：它要的是把任意命令的
 输出摆进版式，与本项目「不执行命令」的取向直接冲突，需要先想清楚边界。
 
-其它已知缺口：运行期文本（`--explain`、`--sources`、错误信息）只有中文，帮助已双语
-（`VITALS_LANG=zh|en`，不设时按 locale 判断，拿不准用中文）；shell 补全只做了 bash 与
-zsh（fish 没做——手上没有 fish，没验证过的不交付）。
+其它已知缺口：补全的说明文字是中文（帮助与运行期文案本身有 `VITALS_LANG`，补全这片小界面
+没跟着翻，bash 那份干脆没有说明文字）——三份补全都真装载跑过。
 
 ## 开发
 
@@ -247,7 +247,7 @@ $ cargo fmt --all -- --check
 | [`docs/logo.md`](docs/logo.md) | Logo 与配色 |
 | [`doc/vitals.1`](doc/vitals.1) | man page（`man ./doc/vitals.1`，也可以用 `groff -man` 渲染） |
 | [`presets/`](presets) | 示例配置：`minimal` / `desktop` / `headless` / `all` |
-| [`completions/`](completions) | bash 与 zsh 补全（fish 没做：本机没有 fish，没验证过的不交付） |
+| [`completions/`](completions) | bash、zsh 与 fish 补全（三份都真装载验证过） |
 | [`AUDIT.md`](AUDIT.md) | 安全与质量审计报告 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本变更 |
 

@@ -103,5 +103,11 @@ impl Renderer for JsonRenderer {
 /// 唯一的失败来源就是往 `out` 写字节时出错。为它加一个 variant 只会让调用方
 /// 多写一个永远走不到的分支。
 fn to_io(error: serde_json::Error) -> RenderError {
-    RenderError::Write(std::io::Error::other(error))
+    // serde_json 把底下的 IO 错误包了一层：直接 `Error::other` 会把 kind 抹成 `Other`，
+    // 于是 `vitals --json | head -1` 这种「下游早退」被当成写失败（退出码 1）。
+    // 是 IO 错误就把 kind 原样带出来，让上层那条 BrokenPipe 分支认得它。
+    match error.io_error_kind() {
+        Some(kind) => RenderError::Write(std::io::Error::new(kind, error)),
+        None => RenderError::Write(std::io::Error::other(error)),
+    }
 }

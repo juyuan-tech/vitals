@@ -100,27 +100,18 @@ impl Collector for NetIo {
         // `time2` 也取在第二次 `ffNetIOGetIoCounters` 之前）。
         let elapsed = started.elapsed();
 
-        let after = counters(&interface)?.ok_or_else(|| {
-            CollectError::new(format!("采样窗口里 {interface} 消失了，量不到速率"))
-        })?;
+        let after = counters(&interface)?
+            .ok_or_else(|| CollectError::new(crate::i18n::now().interface_gone(&interface)))?;
 
         let elapsed_ms = elapsed.as_millis() as u64;
         if elapsed_ms == 0 {
-            return Err(CollectError::new(
-                "net-io 的采样间隔是 0 毫秒，算不出每秒速率",
-            ));
+            return Err(CollectError::new(crate::i18n::now().net_io_zero_interval()));
         }
 
-        let rx_rate = rate(before.rx_bytes, after.rx_bytes, elapsed_ms).ok_or_else(|| {
-            CollectError::new(format!(
-                "{interface} 的 rx_bytes 在采样窗口里回退了（网卡被重置？），这次算不出真实速率"
-            ))
-        })?;
-        let tx_rate = rate(before.tx_bytes, after.tx_bytes, elapsed_ms).ok_or_else(|| {
-            CollectError::new(format!(
-                "{interface} 的 tx_bytes 在采样窗口里回退了（网卡被重置？），这次算不出真实速率"
-            ))
-        })?;
+        let rx_rate = rate(before.rx_bytes, after.rx_bytes, elapsed_ms)
+            .ok_or_else(|| CollectError::new(crate::i18n::now().rx_regressed(&interface)))?;
+        let tx_rate = rate(before.tx_bytes, after.tx_bytes, elapsed_ms)
+            .ok_or_else(|| CollectError::new(crate::i18n::now().tx_regressed(&interface)))?;
 
         Ok(vec![
             describe(
@@ -175,7 +166,7 @@ fn counters(interface: &str) -> Result<Option<Counters>, CollectError> {
     let parse = |what: &str, text: &str| {
         text.parse::<u64>().map_err(|source| {
             CollectError::caused_by(
-                format!("解析 {interface} 的 {what} 失败（原文 `{text}`）"),
+                crate::i18n::now().counter_parse_failed(interface, what, text),
                 source,
             )
         })

@@ -30,19 +30,27 @@ fn read_capped(path: &str) -> Result<Option<Vec<u8>>, CollectError> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
-        Err(source) => return Err(CollectError::caused_by(format!("打开 {path} 失败"), source)),
+        Err(source) => {
+            return Err(CollectError::caused_by(
+                crate::i18n::now().open_failed(path),
+                source,
+            ));
+        }
     };
 
     let mut content = Vec::new();
     // 多读一个字节：正好等于上限时也能分清「就是这么大」与「还有更多」。
     if let Err(source) = file.take(MAX_READ + 1).read_to_end(&mut content) {
-        return Err(CollectError::caused_by(format!("读取 {path} 失败"), source));
+        return Err(CollectError::caused_by(
+            crate::i18n::now().cannot_read(path),
+            source,
+        ));
     }
 
     if content.len() as u64 > MAX_READ {
-        return Err(CollectError::new(format!(
-            "{path} 超过读取上限（{MAX_READ} 字节），拒绝读进内存"
-        )));
+        return Err(CollectError::new(
+            crate::i18n::now().too_large(path, MAX_READ),
+        ));
     }
 
     Ok(Some(content))
@@ -59,7 +67,7 @@ pub fn text(path: &str) -> Result<Option<String>, CollectError> {
     };
 
     let content = String::from_utf8(bytes)
-        .map_err(|error| CollectError::caused_by(format!("{path} 不是 UTF-8"), error))?;
+        .map_err(|error| CollectError::caused_by(crate::i18n::now().not_utf8(path), error))?;
 
     Ok(Some(content.trim().to_owned()))
 }

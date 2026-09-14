@@ -130,10 +130,7 @@ fn parse_module_with(name: &str, lang: Lang) -> Result<ModuleType, String> {
 
     let valid: Vec<&str> = ModuleType::ALL.iter().map(|module| module.name()).collect();
     let list = valid.join(", ");
-    Err(match lang {
-        Lang::Zh => format!("未知模块 `{name}`；可用：{list}"),
-        Lang::En => format!("unknown module `{name}`; available: {list}"),
-    })
+    Err(crate::i18n::Messages::of(lang).unknown_module(name, &list))
 }
 
 /// 叠完优先级之后的最终设置。
@@ -210,25 +207,10 @@ impl Settings {
     #[must_use]
     pub fn describe(&self) -> Vec<String> {
         vec![
-            format!(
-                "模块 {} 个：{}",
-                self.modules.len(),
-                self.module_names().join(", ")
-            ),
-            format!(
-                "logo={} 颜色={} json={} verbose={}",
-                self.logo,
-                on_off(self.allow_color),
-                on_off(self.json),
-                on_off(self.verbose),
-            ),
+            crate::i18n::now().modules_count(self.modules.len(), &self.module_names().join(", ")),
+            crate::i18n::now().settings_line(&self.logo, self.allow_color, self.json, self.verbose),
         ]
     }
-}
-
-/// `true` / `false` → `开` / `关`。
-fn on_off(value: bool) -> &'static str {
-    if value { "开" } else { "关" }
 }
 
 /// 按语言生成 clap 的命令定义。
@@ -314,15 +296,15 @@ fn english(command: Command) -> Command {
         })
 }
 
-/// 中文帮助的页脚：说清帮助语言怎么选，以及哪些文本还不是双语。
+/// 中文帮助的页脚：说清帮助语言怎么选、哪些文本跟着它走。
 const HELP_FOOTER_ZH: &str = "\
 帮助语言：VITALS_LANG=zh|en（不设时看 LC_ALL / LC_MESSAGES / LANG，拿不准用中文）
-运行期文本（--explain、--sources、错误信息）目前只有中文。";
+帮助、运行期文本（--explain、--sources、错误信息）与 `--gen-config` 的模板都跟着它走。";
 
 /// 英文帮助的页脚。
 const HELP_FOOTER_EN: &str = "\
 Help language: VITALS_LANG=zh|en (otherwise LC_ALL / LC_MESSAGES / LANG; when unsure, Chinese)
-Runtime messages (--explain, --sources, errors) are still Chinese only.";
+The help, the runtime messages (--explain, --sources, errors) and the `--gen-config` template all follow it.";
 
 /// 英文的详细说明，对应 `Cli` 上的文档注释。
 const EN_LONG_ABOUT: &str = "\

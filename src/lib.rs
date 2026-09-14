@@ -18,6 +18,7 @@ pub mod collectors;
 pub mod conditions;
 pub mod config;
 pub mod core;
+pub mod i18n;
 pub mod lang;
 pub mod render;
 

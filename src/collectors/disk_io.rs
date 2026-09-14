@@ -70,7 +70,7 @@ impl Collector for DiskIo {
         let elapsed_ms = elapsed.as_millis() as u64;
         if elapsed_ms == 0 {
             return Err(CollectError::new(
-                "disk-io 的采样间隔是 0 毫秒，算不出每秒速率",
+                crate::i18n::now().disk_io_zero_interval(),
             ));
         }
 
@@ -78,9 +78,9 @@ impl Collector for DiskIo {
         // "Different number of physical disks. Hardware change?"。
         // 我们比它多走一步：把变的是哪一个也说清楚。
         if let Some(changed) = set_difference(&before, &after) {
-            return Err(CollectError::new(format!(
-                "采样窗口里物理盘集合变了（{changed}），这次算不出真实速率"
-            )));
+            return Err(CollectError::new(
+                crate::i18n::now().physical_disks_changed(&changed),
+            ));
         }
 
         let mut entries: Vec<(String, Info)> = Vec::with_capacity(before.len());
@@ -90,16 +90,14 @@ impl Collector for DiskIo {
             };
 
             let Some(read_rate) = rate(old.read_sectors, new.read_sectors, elapsed_ms) else {
-                return Err(CollectError::new(format!(
-                    "{} 的读扇区数在采样窗口里回退了（盘被重置？），这次算不出真实速率",
-                    old.dev
-                )));
+                return Err(CollectError::new(
+                    crate::i18n::now().read_sectors_regressed(&old.dev),
+                ));
             };
             let Some(write_rate) = rate(old.write_sectors, new.write_sectors, elapsed_ms) else {
-                return Err(CollectError::new(format!(
-                    "{} 的写扇区数在采样窗口里回退了（盘被重置？），这次算不出真实速率",
-                    old.dev
-                )));
+                return Err(CollectError::new(
+                    crate::i18n::now().write_sectors_regressed(&old.dev),
+                ));
             };
 
             entries.push((
@@ -166,7 +164,7 @@ fn scan() -> Result<Option<Vec<Disk>>, CollectError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(source) => {
             return Err(CollectError::caused_by(
-                format!("读取 {SYS_BLOCK} 失败"),
+                crate::i18n::now().cannot_read(SYS_BLOCK),
                 source,
             ));
         }
@@ -188,9 +186,9 @@ fn scan() -> Result<Option<Vec<Disk>>, CollectError> {
             continue; // stat 都没有就不是能测的盘
         };
         let Some((read_ios, read_sectors, write_ios, write_sectors)) = parse_stat(&text) else {
-            return Err(CollectError::new(format!(
-                "{SYS_BLOCK}/{dev}/stat 的字段不是一个合法的块设备 stat（原文 `{text}`）"
-            )));
+            return Err(CollectError::new(
+                crate::i18n::now().bad_block_stat(format!("{SYS_BLOCK}/{dev}/stat"), &text),
+            ));
         };
 
         disks.push(Disk {
@@ -218,13 +216,13 @@ fn set_difference(before: &[Disk], after: &[Disk]) -> Option<String> {
         .find(|disk| !has(after, &disk.dev))
         .map(|disk| disk.dev.clone())
     {
-        return Some(format!("少了 {missing}"));
+        return Some(crate::i18n::now().disks_missing(&missing));
     }
 
     after
         .iter()
         .find(|disk| !has(before, &disk.dev))
-        .map(|disk| format!("多了 {}", disk.dev))
+        .map(|disk| crate::i18n::now().disks_unexpected(&disk.dev))
 }
 
 /// `(后 - 前) * 1000 / 间隔毫秒`，扇区数先乘 512 变成字节。

@@ -14,23 +14,23 @@ vitals 的算法是 `MemTotal - MemAvailable`（`src/collectors/memory.rs` +
 
 ```console
 $ free -h | head -2
-               总计        已用        空闲        共享   缓冲/缓存        可用
-内存：         30Gi        22Gi       494Mi       4.7Gi        10Gi       7.9Gi
+                总计        已用        空闲        共享   缓冲/缓存        可用
+内存：          30Gi       5.4Gi        23Gi       152Mi       1.8Gi        25Gi
 
 $ vitals --json --module memory --logo none | jq -r '.entries[].value'
-22.75 GiB / 30.65 GiB (74%)
+5.41 GiB / 30.65 GiB (18%)
 
 $ grep -E '^MemTotal|^MemAvailable' /proc/meminfo
-MemTotal:       32140260 kB     # 30.65 GiB
-MemAvailable:    8281996 kB     #  7.90 GiB
+MemTotal:       32140256 kB     # 30.65 GiB
+MemAvailable:   26470216 kB     #  25.24 GiB
 ```
 
-32140260 − 8281996 = 23858264 kB = 22.75 GiB——和 vitals 印的完全一致。`free` 印 `22Gi`
+32140256 − 26470216 = 5670040 kB = 5.41 GiB——和 vitals 印的完全一致。`free` 印 `5.4Gi`
 是因为它按 GiB 取整。
 
 ## `--json` 里的数字能拿来计算吗？
 
-不能。`value` 就是屏幕上那一行，带给人读的单位（`22.75 GiB`、`74%`、`1 day, 7 hours`），
+不能。`value` 就是屏幕上那一行，带给人读的单位（`5.41 GiB`、`18%`、`1 day, 7 hours`），
 而且 `uptime`、`memory`、`cpu`、`net-io`、`disk-io`、`top` 每次都不同。**这份 JSON 没有原始
 数值字段。**
 
@@ -124,7 +124,9 @@ $ export VITALS_LANG=en         # 或者一直用英文
 不设 `VITALS_LANG` 时看 `LC_ALL` / `LC_MESSAGES` / `LANG`；**拿不准就用中文**，
 所以「什么都不设」还是原来的行为。优先级表和判定细则见 [`cli.md`](cli.md#语言)。
 
-只换帮助：`--explain`、`--sources` 和错误信息目前仍是中文。
+帮助**和运行期文案**都跟着它走：`--explain`、`--sources`、错误信息，乃至 `--gen-config`
+打印的那份带注释模板（中英各一份，内容一致）都是。字段名（`OS:`、`Memory:`）本来就是英文，
+两种语言下都一样。
 
 ## 怎么加一个模块？
 

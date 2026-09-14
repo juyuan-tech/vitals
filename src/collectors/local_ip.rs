@@ -143,7 +143,7 @@ fn describe(
 /// 掩掉它就查不出「为什么每个网络模块都是空的」。
 fn probe(bind: &str, target: &str) -> Result<Option<IpAddr>, CollectError> {
     let socket = std::net::UdpSocket::bind(bind).map_err(|source| {
-        CollectError::caused_by(format!("创建 UDP socket（bind {bind}）失败"), source)
+        CollectError::caused_by(crate::i18n::now().udp_socket_failed(bind), source)
     })?;
 
     if socket.connect(target).is_err() {

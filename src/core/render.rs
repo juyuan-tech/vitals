@@ -69,9 +69,31 @@ pub struct Logo {
 ///
 /// 目前只会因为写输出出错。将来真出现别的失败原因再加 variant——
 /// 现在多造几个用不上的 variant 只是自欺欺人的「可扩展性」。
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum RenderError {
     /// 往输出流写入失败（管道断了、磁盘满了、终端关了）。
-    #[error("写入输出失败")]
-    Write(#[from] std::io::Error),
+    Write(std::io::Error),
+}
+
+/// `Display` 自己写：消息要按语言给，`thiserror` 的属性里只写得了字面量。
+impl std::fmt::Display for RenderError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Write(_) => formatter.write_str(crate::i18n::now().write_failed()),
+        }
+    }
+}
+
+impl std::error::Error for RenderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Write(error) => Some(error),
+        }
+    }
+}
+
+impl From<std::io::Error> for RenderError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Write(error)
+    }
 }

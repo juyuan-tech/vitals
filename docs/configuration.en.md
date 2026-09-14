@@ -6,10 +6,12 @@ This document explains the `vitals` TOML configuration file: where it lives, how
 
 Every conclusion in this document comes from three places: the repository source (repository root), the built-in default config
 `src/config/default.toml`, and real runs of `target/release/vitals`. Every key is given a
-`file:line`; every behavior is annotated with how it was verified. Version: `vitals 0.1.1` (`vitals --version`).
+`file:line`; every behavior is annotated with how it was verified. Version: `vitals 0.1.2` (`vitals --version`).
 
-> Output quoted below is verbatim. Runtime messages are still Chinese only (the help itself
-> is bilingual), so some quoted lines are in Chinese.
+> Output quoted below is verbatim. Runtime text follows `VITALS_LANG` too (`zh` Chinese /
+> `en` English); when it is unset, `LC_ALL` / `LC_MESSAGES` / `LANG` decide, and anything
+> uncertain means Chinese. The output quoted below therefore comes from English runs
+> (`VITALS_LANG=en`).
 
 There is only one path for parsing a config file: `load` in `src/config.rs`, finally deserialized into
 `ConfigFile` in `src/config/schema.rs`. Other than that there is no other source of configuration.
@@ -27,16 +29,16 @@ The repository also ships four example configs that can be run as-is (`presets/`
 vitals --config /path/to/config.toml
 ```
 
-`--config <FILE>` is defined by `src/cli.rs:32-34`, and `src/main.rs:47-53` hands it to
-`config::load` (`src/config.rs:61-75`). **An explicitly specified file must be readable**: if the file does not exist,
-you have no permission, or it is not UTF-8, an error is reported and it exits with exit code 1 (`src/config.rs:46-52`, `100-107`
-→ `src/main.rs:49-52`).
+`--config <FILE>` is defined by `src/cli.rs:32-34`, and `src/main.rs:50-56` hands it to
+`config::load` (`src/config.rs:105-119`). **An explicitly specified file must be readable**: if the file does not exist,
+you have no permission, or it is not UTF-8, an error is reported and it exits with exit code 1 (reading and the size cap
+`src/config.rs:61-64`, `71-96`; parsing and the version check `src/config.rs:122-136` → `src/main.rs:52-55`).
 
 Measured:
 
 ```console
 $ vitals --config /tmp/vitals-docs-tests/nope.toml --logo none
-vitals: 读取配置文件 /tmp/vitals-docs-tests/nope.toml 失败：No such file or directory (os error 2)
+vitals: failed to read config file /tmp/vitals-docs-tests/nope.toml: No such file or directory (os error 2)
 [exit=1]
 ```
 
@@ -49,12 +51,12 @@ When `--config` is not written, the path is computed in the following order (`sr
 2. Otherwise, the environment variable `HOME` exists → `$HOME/.config/vitals/config.toml`
    (`src/config/path.rs:44`).
 3. If neither exists → there is no default path, and `config_path()` returns `None`
-   (`src/config/path.rs:22-23`, `src/config.rs:66-68`).
+   (`src/config/path.rs:22-23`, `src/config.rs:110-112`).
 
 The relative path constant `vitals/config.toml` is at `src/config/path.rs:18`.
 
-When the path that was found **does not exist, no error is reported**; it quietly uses the built-in default (`src/config.rs:70-74`) — someone
-running it for the first time should not see an error. This is the only behavioral difference between the explicit path and the default path (`src/config.rs:54-60`).
+When the path that was found **does not exist, no error is reported**; it quietly uses the built-in default (`src/config.rs:114-118`) — someone
+running it for the first time should not see an error. This is the only behavioral difference between the explicit path and the default path (`src/config.rs:98-104`).
 
 Measured (one real run per line):
 
@@ -126,8 +128,9 @@ cursor, terminal, terminal-font, cpu, gpu, memory, swap, disk, local-ip,
 battery, locale, break, colors
 ```
 
-In `src/config.rs:34-36`, `default_toml()` is exactly `include_str!("config/default.toml")`, and
-`--gen-config` prints it as-is (`src/main.rs:35-38`). In testing, the output of `vitals --gen-config` is byte-for-byte identical to
+In `src/config.rs:37-39`–`46-51`, `default_toml_for()` picks a template by language: Chinese
+`include_str!("config/default.toml")`, English `include_str!("config/default.en.toml")`; both parse back into the same `Config`.
+`--gen-config` prints the selected one as-is (`src/main.rs:38-41`). In testing, the output of `vitals --gen-config` is byte-for-byte identical to
 `/tmp/vitals-facts/gen-config.toml` (`diff` shows no difference).
 
 ---
@@ -147,7 +150,7 @@ unknown field `foo`, expected one of `type`, `platforms`, `when-command-exists`,
 
 | Key | Type | Default | Purpose | Location |
 | --- | --- | --- | --- | --- |
-| `config_version` | Integer (u32) | `1` (when omitted, `CURRENT_CONFIG_VERSION` is taken) | Declares which config version this file targets. When it is **higher** than the version the program supports, startup is refused | Field `src/config/schema.rs:28-29`; default value source `src/config/schema.rs:19-21`, `src/config.rs:26`; validation `src/config.rs:84-89` |
+| `config_version` | Integer (u32) | `1` (when omitted, `CURRENT_CONFIG_VERSION` is taken) | Declares which config version this file targets. When it is **higher** than the version the program supports, startup is refused | Field `src/config/schema.rs:28-29`; default value source `src/config/schema.rs:19-21`, `src/config.rs:29`; validation `src/config.rs:128-133` |
 | `modules` | `[[modules]]` array table | omitted = the built-in default 24 entries | The modules to be shown, **the order is the display order**; once written, it replaces the whole list of built-in defaults | Field `src/config/schema.rs:36`; override logic `src/config/schema.rs:48-50`; default list `src/config/schema.rs:429-455` |
 
 Boundary behavior of `config_version` (all measured):
@@ -155,8 +158,8 @@ Boundary behavior of `config_version` (all measured):
 - Omitted → treated as `1`, normal.
 - Equal to `1` (`CURRENT_CONFIG_VERSION`) → normal.
 - Less than `1`, for example `0` → **no error**, renders normally. Validation has only the "higher" rule
-  (`src/config.rs:84`).
-- Greater than `1`, for example `2` → exit code 1, verbatim: `vitals: 配置版本 2 高于本程序支持的 1，请升级 vitals`.
+  (`src/config.rs:128`).
+- Greater than `1`, for example `2` → exit code 1, verbatim: `vitals: config version 2 is newer than version 1, the newest this build supports; upgrade vitals`.
 - The type is not an integer, for example `config_version = "1"` → TOML parse failure, exit code 1
   (`invalid type: string "1", expected u32`).
 
@@ -229,7 +232,7 @@ The relationship of the three conditions is **AND**: if any one is not satisfied
 `platforms` → `when-command-exists` → `when-file-exists`, and **the one that fails first** determines the skip reason (`src/conditions.rs:84-102`).
 
 Conditions are evaluated uniformly before collection, and the scheduler only sees the final list (`src/conditions.rs:10`, `64-78`;
-`src/main.rs:87`).
+`src/main.rs:90`).
 
 ### 4.1 How each of the three conditions is judged
 
@@ -243,9 +246,9 @@ Conditions are evaluated uniformly before collection, and the scheduler only see
 `113-119`). Details:
 
 - An empty string never matches (`src/conditions.rs:129-131`). Measured: `when-command-exists = ""`
-  is skipped, and `--verbose` displays ``命令 `` 不在 PATH 里``.
+  is skipped, and `--verbose` displays ``the command `` is not on PATH``.
 - If the name contains `/`, no PATH lookup is done and it is treated directly as a path (`src/conditions.rs:133-136`).
-  Measured: `/bin/sh` passes, `/bin/vitals-不存在` is skipped.
+  Measured: `/bin/sh` passes, `/bin/vitals-does-not-exist` is skipped.
 - It must be a **regular file with the execute bit set**: if a file with the same name exists but has no execute bit, it still counts as "not existing"
   (`src/conditions.rs:147-164`). Measured: putting a file with no execute bit into `PATH` still results in a skip.
 - If `PATH` is not set, nothing matches (`src/conditions.rs:138-140`).
@@ -262,26 +265,27 @@ The "does not execute the command" rule was directly verified: a script that wou
   When there is no `HOME` either, it is returned as-is and the home directory is not guessed (`src/conditions.rs:182-186`).
   Measured: `~/.config` passes, `~/.config/definitely-not-here-vitals` is skipped.
 - Note: what `--verbose` prints is **the path exactly as written in the config**, unexpanded. The measured output is
-  `跳过 memory：路径 ~/.config/definitely-not-here-vitals 不存在`.
+  `skipped memory: the path ~/.config/definitely-not-here-vitals does not exist`.
 
 ### 4.2 What you see when skipped
 
-By default nothing is printed (`src/main.rs:89-90`). Adding `--verbose` prints one line to **stderr**
-(`src/main.rs:91-99`), and the messages come from `SkipReason::describe()` (`src/conditions.rs:47-60`):
+By default nothing is printed (`src/main.rs:92-93`). Adding `--verbose` prints one line to **stderr**
+(`src/main.rs:94-102`), and the messages come from `SkipReason::describe()` (`src/conditions.rs:50-59`;
+the wording of the four reasons lives in `src/i18n.rs:214-244`):
 
 | Reason | Message | Measured output |
 | --- | --- | --- |
-| Platform mismatch | `当前平台是 <名字>` | `vitals: 跳过 memory：当前平台是 linux` |
-| Command not in PATH | `` 命令 `<名字>` 不在 PATH 里 `` | ``vitals: 跳过 memory：命令 `vitals-这个命令不存在` 不在 PATH 里`` |
-| Path does not exist | `路径 <路径> 不存在` | `vitals: 跳过 memory：路径 /nonexistent/vitals 不存在` |
+| Platform mismatch | `the current platform is <name>` | `vitals: skipped memory: the current platform is linux` |
+| Command not in PATH | `` the command `<name>` is not on PATH `` | ``vitals: skipped memory: the command `vitals-does-not-exist` is not on PATH`` |
+| Path does not exist | `the path <path> does not exist` | `vitals: skipped memory: the path /nonexistent/vitals does not exist` |
 
 To distinguish "skipped" (blocked by a condition, not collected at all) from "empty" (collected but there is no data), use `--explain`
-(`src/main.rs:106-112`, `194-228`).
+(`src/main.rs:108-114`, `194-228`).
 
 ### 4.3 Relationship to `--module`
 
 `--module` is a **selection**, not a filter: a named module always appears, and it **drops the conditions from the config** —
-explicitly naming it is the stronger intent (`src/cli.rs:130-136`, `159-171`). Measured: with
+explicitly naming it is the stronger intent (`src/cli.rs:124-134` for the check and the value names, `src/i18n.rs:204` for the wording, `159-171`). Measured: with
 `platforms = ["windows"]` and `when-file-exists = "/nope"` attached to `memory` in the config, it is skipped when `--module` is not passed;
 with `--module memory` it is shown as usual.
 
@@ -355,8 +359,8 @@ Adding `--verbose` to the same config confirms on stderr that all 10 modules pas
 
 ```console
 $ vitals --config example-full.toml --logo none --no-color --verbose
-vitals: 模块 10 个：title, separator, os, kernel, uptime, memory, disk, swap, break, colors
-vitals: logo=none 颜色=关 json=关 verbose=开
+vitals: 10 modules: title, separator, os, kernel, uptime, memory, disk, swap, break, colors
+vitals: logo=none color=off json=off verbose=on
 ```
 
 ---
@@ -368,7 +372,8 @@ At least one real run per key (the repository's binary `target/release/vitals`):
 | Key | Form verified | Observed result |
 | --- | --- | --- |
 | `config_version` | `1` / `0` / omitted | renders normally, exit code 0 |
-| `config_version` | `2` | `配置版本 2 高于本程序支持的 1，请升级 vitals`, exit code 1 |
+| whole file | > 8 MiB | `over the read limit of 8388608 bytes; not loading it into memory`, exit code 1 |
+| `config_version` | `2` | `config version 2 is newer than version 1, the newest this build supports; upgrade vitals`, exit code 1 |
 | `config_version` | `"1"` | TOML parse failure, exit code 1 |
 | `modules` | write only `[[modules]] type = "memory"` | only one Memory line is output |
 | `modules` | not written / empty file / no config file | the built-in default view, exit code 0 |

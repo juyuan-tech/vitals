@@ -21,8 +21,10 @@ which files it actually read.
 
 > **Documentation language.** Every per-topic reference exists in Chinese (`docs/<name>.md`) and
 > in English (`docs/<name>.en.md`); the two link to each other at the top. The built-in help is
-> bilingual too (`VITALS_LANG=zh|en`). Runtime messages — `--explain`, `--sources`, errors — are
-> still Chinese only, so quoted program output stays Chinese even in the English references.
+> bilingual too (`VITALS_LANG=zh|en`), and so is all runtime text — `--explain`, `--sources`,
+> `--verbose`, errors and the `--gen-config` template. Without `VITALS_LANG`, `LC_ALL` /
+> `LC_MESSAGES` / `LANG` decide, and anything uncertain means Chinese; the program output
+> quoted in these English references is the output of an English run (`VITALS_LANG=en`).
 
 ## Install
 
@@ -94,7 +96,7 @@ These three flags are the reason this project exists:
 $ vitals --sources --module os,host,wm
 os    /etc/os-release
 host  /sys/devices/virtual/dmi/id/sys_vendor, /sys/devices/virtual/dmi/id/product_name, /sys/devices/virtual/dmi/id/product_version, /sys/devices/virtual/dmi/id/board_name
-wm    没有读文件  （数据来自环境变量或系统调用）
+wm    no files read  (data comes from environment variables or system calls)
 ```
 
 - `--sources` reports what was **observed at runtime**, not a hand-written table of origins.
@@ -103,25 +105,25 @@ wm    没有读文件  （数据来自环境变量或系统调用）
 
 ```console
 $ vitals --explain --module os,gamepad
-os       显示  1 项
-gamepad  空  这台机器上没有可显示的数据
+os       shown  1 item
+gamepad  empty  nothing to show on this machine
 ```
 
 
-另外两态可以自己造出来看（下面两条都在本机跑过）：
+The other two states are easy to produce yourself (both runs below were done on this machine):
 
 ```console
 $ printf 'config_version = 1\n\n[[modules]]\ntype = "camera"\nwhen-file-exists = "/definitely/not/here"\n' > /tmp/cond.toml
 $ vitals --config /tmp/cond.toml --explain --logo none
-camera  跳过  路径 /definitely/not/here 不存在
+camera  skipped  the path /definitely/not/here does not exist
 
 $ TZ=/etc/shadow vitals --explain --module datetime --logo none
-vitals: datetime 模块失败：打开 /etc/shadow 失败
-datetime  失败  打开 /etc/shadow 失败
+vitals: the datetime module failed: failed to open /etc/shadow
+datetime  failed  failed to open /etc/shadow
 ```
 
-注意**模块失败时退出码仍是 0**：失败会同时在 stderr 上给一行警告，但不会让一个模块的问题
-掩盖掉其它模块的结果。
+Note that **a module that fails still leaves the exit code at 0**: the failure also prints one
+warning line to stderr, but one module's problem does not hide the other modules' results.
 
 ## Modules
 
@@ -147,8 +149,10 @@ datetime  失败  打开 /etc/shadow 失败
 ## Configuration
 
 `~/.config/vitals/config.toml` (honours `XDG_CONFIG_HOME`), or point `--config` elsewhere.
-`--gen-config` prints a commented template. The file **replaces the built-in default wholesale**:
-once you list `modules`, the built-in list no longer applies. Per-key reference:
+`--gen-config` prints a commented template, in Chinese or English to match the language
+(`config/default.toml` / `config/default.en.toml`; the two are structurally identical). The file
+**replaces the built-in default wholesale**: once you list `modules`, the built-in list no longer
+applies. Per-key reference:
 **[`docs/configuration.md`](docs/configuration.en.md)** (Chinese).
 
 Each module may declare conditions; an unmet condition skips it (skipping is not an error):
@@ -213,7 +217,8 @@ How to report a security issue: [`SECURITY.md`](SECURITY.md).
 Every per-topic reference exists in both languages: the files under `docs/` are the Chinese
 originals, and each has an English twin (`docs/<name>.en.md`). The two files link to each
 other at the top. Quoted program output is verbatim in whatever language the program
-printed it — runtime messages (`--explain`, `--sources`, errors) are still Chinese only.
+printed it; the output quoted in these English references comes from English runs
+(`VITALS_LANG=en`).
 
 | File | Contents |
 | --- | --- |
@@ -226,7 +231,7 @@ printed it — runtime messages (`--explain`, `--sources`, errors) are still Chi
 | [`docs/logo.en.md`](docs/logo.en.md) | logos and colours |
 | [`doc/vitals.en.1`](doc/vitals.en.1) | man page, English (`man ./doc/vitals.en.1`; the Chinese one is `doc/vitals.1`) |
 | [`presets/`](presets) | example configs: minimal / desktop / headless / all |
-| [`completions/`](completions) | bash and zsh completions (no fish: untested here, and untested things are not shipped) |
+| [`completions/`](completions) | bash, zsh and fish completions (all three really loaded and verified) |
 | [`AUDIT.md`](AUDIT.md) | security and quality audit (Chinese) |
 | [`CHANGELOG.md`](CHANGELOG.md) | release history |
 
@@ -238,11 +243,9 @@ friends — most need a linked system library (at odds with "no `unsafe`, no ext
 a network request, or an external command. `Custom` is not implemented either: it would place
 arbitrary command output into the layout, which collides with the no-subprocess stance.
 
-Other known gaps: runtime messages (`--explain`, `--sources`, errors) are Chinese only —
-the help itself is bilingual (`VITALS_LANG=zh|en`, otherwise decided by the locale, and
-when that is unclear it stays Chinese). Shell completions cover bash and zsh only; there
-is no fish one, because there was no fish here to verify it on, and untested things are
-not shipped.
+Other known gaps: the completion descriptions are Chinese (the help and the runtime text
+themselves follow `VITALS_LANG`; this little completion surface was not translated, and the
+bash one has no descriptions at all) — all three completions were really loaded and run.
 
 ## Development
 

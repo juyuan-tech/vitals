@@ -100,9 +100,7 @@ impl Collector for Top {
         let after = snapshot();
         let elapsed_ms = elapsed.as_millis() as u64;
         if elapsed_ms == 0 {
-            return Err(CollectError::new(
-                "top 的采样间隔是 0 毫秒，算不出 CPU 占用率",
-            ));
+            return Err(CollectError::new(crate::i18n::now().top_zero_interval()));
         }
 
         let mut rows = Vec::new();

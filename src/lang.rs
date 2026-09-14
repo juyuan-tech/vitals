@@ -1,9 +1,15 @@
-//! 帮助文本用哪种语言。
+//! 用哪种语言：帮助文本与运行期文案都看它。
 //!
-//! 只影响**命令行帮助**。字段名（`OS:`、`Memory:`）本来就是英文；运行期文本
-//! （`--explain`、`--sources`、错误信息）仍是中文，这一点明写在 `docs/cli.md`。
+//! 字段名（`OS:`、`Memory:`）本来就是英文，翻译不到；`--gen-config` 打印的配置文件
+//! 有中英两份（`config/default.toml` 与 `config/default.en.toml`），跟这里选。
+//!
+//! 生效语言是**进程级**的：启动时 [`Lang::resolve`] 定一次，之后只读。理由见
+//! [`crate::i18n`]：消息在哪里产生（采集器深处的解析函数）和谁来显示离得远，
+//! 让解析函数为显示背上语言参数不划算。
 
-/// 帮助语言。
+use std::sync::OnceLock;
+
+/// 界面语言。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lang {
     /// 中文。
@@ -12,8 +18,28 @@ pub enum Lang {
     En,
 }
 
-/// 显式指定帮助语言的变量。
+/// 显式指定语言的变量。
 pub const LANG_ENV: &str = "VITALS_LANG";
+
+/// 本次运行的生效语言。
+static CURRENT: OnceLock<Lang> = OnceLock::new();
+
+/// 定下本次运行的生效语言。进程里只认第一次调用。
+///
+/// 只有 `main` 调它：语言一旦定下来就不该再变，否则同一个进程里前后两条消息
+/// 可能不是同一种语言。
+pub fn set_current(lang: Lang) {
+    let _ = CURRENT.set(lang);
+}
+
+/// 当前生效语言。
+///
+/// 没人设过就是中文——「拿不准一律中文」这条规矩在全局这一层同样成立，
+/// 库的使用者不调 [`set_current`] 时行为与以前一致。
+#[must_use]
+pub fn current() -> Lang {
+    CURRENT.get().copied().unwrap_or(Lang::Zh)
+}
 
 impl Lang {
     /// 按 `VITALS_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` 的顺序定语言。
@@ -90,7 +116,13 @@ fn language_tag(value: Option<&str>) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::Lang;
+    use super::{Lang, current};
+
+    /// 没人设过时是中文：库被当库用、或者测试里直接调，都不该突然变英文。
+    #[test]
+    fn the_effective_language_defaults_to_chinese() {
+        assert_eq!(current(), Lang::Zh);
+    }
 
     #[test]
     fn nothing_set_stays_chinese() {

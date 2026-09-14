@@ -38,7 +38,12 @@ impl Collector for Brightness {
         let entries = match std::fs::read_dir(DIR) {
             Ok(entries) => entries,
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(source) => return Err(CollectError::caused_by(format!("读取 {DIR} 失败"), source)),
+            Err(source) => {
+                return Err(CollectError::caused_by(
+                    crate::i18n::now().cannot_read(DIR),
+                    source,
+                ));
+            }
         };
 
         let mut devices = Vec::new();

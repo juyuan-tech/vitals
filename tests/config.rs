@@ -8,6 +8,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use vitals_rs::lang::Lang;
+
 use vitals_rs::config::{self, Config, ConfigError, ModuleEntry, ModuleType};
 
 /// 集成测试专属的临时目录，cargo 会把它准备好并清理。
@@ -24,9 +26,14 @@ fn scratch(name: &str) -> PathBuf {
 #[test]
 fn default_template_parses_back_to_the_builtin_default() {
     // 这条守着「生成的默认配置」和「代码里的默认」不漂移：
-    // 谁改了一边忘了另一边，这里立刻红。
-    let parsed = config::from_toml(config::default_toml()).unwrap();
-    assert_eq!(parsed, Config::default());
+    // 谁改了一边忘了另一边，这里立刻红。中英两份都要过这一关——
+    // 译文里漏一个模块、或者多写一个，同样红。
+    let chinese = config::from_toml(config::default_toml_for(Lang::Zh)).unwrap();
+    let english = config::from_toml(config::default_toml_for(Lang::En)).unwrap();
+
+    assert_eq!(chinese, Config::default());
+    assert_eq!(english, Config::default());
+    assert_eq!(chinese, english);
 }
 
 #[test]
@@ -240,4 +247,43 @@ fn missing_explicit_file_is_an_error() {
         matches!(error, ConfigError::Read { .. }),
         "实际是：{error:?}"
     );
+}
+
+#[test]
+fn a_config_file_over_the_read_limit_is_rejected_instead_of_read() {
+    // 12 MiB，比 8 MiB 上限大。以前走 `fs::read_to_string`，会整份读进内存；
+    // 指到 `/dev/zero` 那条路能一直读到 OOM。现在走 `read_capped`，超限就报错。
+    let path = scratch("too-large.toml");
+    let chunk = vec![b'#'; 1024 * 1024];
+    let mut file = fs::File::create(&path).expect("建临时配置");
+    for _ in 0..12 {
+        std::io::Write::write_all(&mut file, &chunk).expect("写临时配置");
+    }
+    drop(file);
+
+    let error = config::load_file(&path).expect_err("超过上限该报错，而不是整份读进来");
+    assert!(
+        matches!(error, ConfigError::TooLarge { limit, .. } if limit == 8 * 1024 * 1024),
+        "该报 TooLarge 且带上限：{error:?}"
+    );
+    assert!(
+        error.to_string().contains("8388608"),
+        "错误信息里该写清上限，实际：{error}"
+    );
+
+    fs::remove_file(&path).expect("清掉临时配置");
+}
+
+#[test]
+fn a_config_file_that_is_not_utf8_says_so() {
+    let path = scratch("not-utf8.toml");
+    fs::write(&path, b"config_version = 1\n\xff\xfe\n").expect("写临时配置");
+
+    let error = config::load_file(&path).expect_err("不是 UTF-8 该报错");
+    assert!(
+        matches!(error, ConfigError::NotUtf8 { .. }),
+        "该报 NotUtf8：{error:?}"
+    );
+
+    fs::remove_file(&path).expect("清掉临时配置");
 }

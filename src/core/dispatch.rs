@@ -104,8 +104,10 @@ impl<'a> Dispatcher<'a> {
             match self.find(name) {
                 Some(collector) => runnable.push(collector),
                 None => {
-                    outcome
-                        .push_failure(name, CollectError::new(format!("没有名为 `{name}` 的模块")));
+                    outcome.push_failure(
+                        name,
+                        CollectError::new(crate::i18n::now().no_such_module(name)),
+                    );
                 }
             }
         }
@@ -159,7 +161,9 @@ impl<'a> Dispatcher<'a> {
 
         for (collector, slot) in work.iter().zip(slots) {
             let collected = slot.unwrap_or_else(|| Collected {
-                result: Err(CollectError::new("采集线程异常结束")),
+                result: Err(CollectError::new(
+                    crate::i18n::now().collector_thread_died(),
+                )),
                 paths: Vec::new(),
             });
 

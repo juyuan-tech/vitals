@@ -546,3 +546,56 @@ fn explain_and_sources_together_print_both_reports() {
     assert!(state_at < os_at, "该先打状态，再打依据");
     assert!(state_at < memory_at, "该先打状态，再打依据");
 }
+
+/// stdout 真写不进去时：说清是写失败、退出码 1。
+///
+/// `/dev/full` 写什么都返回 `ENOSPC`，它跟「管道断了」不是一回事：管道断了按 Unix 惯例
+/// 安静退 0（`vitals | head -1`），真的写不进去就得报。这条路径此前只有手工验证。
+#[test]
+fn a_failed_stdout_write_is_reported() {
+    let Ok(full) = std::fs::OpenOptions::new().write(true).open("/dev/full") else {
+        eprintln!("这台机器没有 /dev/full，跳过");
+        return;
+    };
+
+    let output = Command::new(env!("CARGO_BIN_EXE_vitals"))
+        .args(["--module", "os", "--logo", "none"])
+        .env("XDG_CONFIG_HOME", "/nonexistent/vitals-for-tests")
+        .env("VITALS_LANG", "zh")
+        .stdout(std::process::Stdio::from(full))
+        .output()
+        .expect("跑不动自己的二进制");
+
+    assert_eq!(output.status.code(), Some(1), "写失败该退 1：{output:?}");
+    assert!(
+        stderr(&output).contains("写入输出失败"),
+        "该说清是写失败：{}",
+        stderr(&output)
+    );
+}
+
+/// 管道下游提前关掉时**不许 panic**。
+///
+/// 这条测试是「单边」的：关管道的时机与子进程写第一笔的顺序有竞态，抢不到就只是
+/// 写进了缓冲区、同样退 0。所以它**只会因为真出 bug 而红**（以前这里退 101 加一串
+/// panic 噪音），永远不会因为抢不到时序而误报。
+#[test]
+fn a_closed_pipe_does_not_panic() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_vitals"))
+        .args(["--list-modules"])
+        .env("XDG_CONFIG_HOME", "/nonexistent/vitals-for-tests")
+        .env("VITALS_LANG", "zh")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("跑不动自己的二进制");
+
+    // 立刻扔掉读端：下游「先走了」。
+    drop(child.stdout.take());
+
+    let output = child.wait_with_output().expect("收不到自己的二进制");
+    let noise = String::from_utf8_lossy(&output.stderr).into_owned();
+
+    assert_eq!(output.status.code(), Some(0), "管道断了该安静退 0：{noise}");
+    assert!(!noise.contains("panicked"), "不许 panic：{noise}");
+}

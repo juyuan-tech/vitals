@@ -45,8 +45,9 @@ fn toolchain() -> Result<Option<String>, CollectError> {
     };
 
     // 文件确实是 TOML，就用 TOML 解析器读，不手撕字符串。
-    let settings: Settings = toml::from_str(&text)
-        .map_err(|error| CollectError::caused_by(format!("解析 {path} 失败"), error))?;
+    let settings: Settings = toml::from_str(&text).map_err(|error| {
+        CollectError::caused_by(crate::i18n::now().toml_parse_failed(&path), error)
+    })?;
 
     Ok(settings.default_toolchain)
 }
