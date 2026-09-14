@@ -148,19 +148,23 @@ fn a_bad_module_name_is_reported_in_the_chosen_language() {
     );
 }
 
-/// 运行期文案（`--explain` 的四种状态）跟语言走。
+/// 运行期文案（`--explain` 的状态与条数）跟语言走。
 ///
 /// 只挑值一定是 ASCII 的模块：文案是我们的，值是这台机器的，混在一起就分不清谁错。
+///
+/// **断言里不出现「空」**：那要求这台机器真的没有某样硬件。GitHub 的构建机上有虚拟手柄，
+/// `gamepad` 在那里是「显示」而不是「空」，一开始就是这么红的。「空」的措辞由
+/// `src/i18n.rs` 的单元测试直接盯着，不靠宿主机凑。
 #[test]
 fn the_runtime_messages_follow_the_language() {
-    let args = ["--explain", "--module", "os,host,gamepad"];
+    let args = ["--explain", "--module", "os,host"];
     let zh = stdout(&vitals(&args, &[("VITALS_LANG", "zh")], &[]));
     let en = stdout(&vitals(&args, &[("VITALS_LANG", "en")], &[]));
 
     assert!(zh.contains("显示"), "中文 --explain 该有「显示」：\n{zh}");
-    assert!(zh.contains("空"), "中文 --explain 该有「空」：\n{zh}");
+    assert!(zh.contains("1 项"), "中文该用「项」计数：\n{zh}");
     assert!(en.contains("shown"), "英文 --explain 该有 `shown`：\n{en}");
-    assert!(en.contains("empty"), "英文 --explain 该有 `empty`：\n{en}");
+    assert!(en.contains("1 item"), "英文单数该是 `1 item`：\n{en}");
     assert!(!has_chinese(&en), "英文 --explain 里不该有汉字：\n{en}");
 }
 

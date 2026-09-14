@@ -649,6 +649,8 @@ mod tests {
 
         assert_eq!(zh.skipped("os", "理由"), "跳过 os：理由");
         assert_eq!(zh.state_shown(), "显示");
+        assert_eq!(zh.state_empty(), "空");
+        assert_eq!(zh.no_data(), "这台机器上没有");
         assert_eq!(zh.items(1), "1 项");
         assert_eq!(zh.items(2), "2 项");
         assert_eq!(zh.on_off(true), "开");
